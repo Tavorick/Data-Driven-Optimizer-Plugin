@@ -8,11 +8,20 @@ Versie: 1.1
 ## Huidige implementatiestatus (codebase)
 - ✅ Basis plugin-bootstrap, activatie/deactivatie en module-loading.
 - ✅ Settings API met losse opties (`ddo_enabled`, primaire/secundaire API-key).
+- ✅ API-keys worden versleuteld opgeslagen met key-materiaal afgeleid van WordPress salts.
 - ✅ Admin dashboard met conceptinvoer + AJAX-preview.
 - ✅ WP-Cron orchestration voor 15-min fetch, weekly retrain en daily introspect.
 - ✅ Database schema met tabellen voor FB/GA-data, concepten en feedback.
 - ✅ REST status endpoint (`/ddo/v1/status`).
 - ✅ Nieuwe feedback-flow: REST submit + feedbacksamenvatting endpoint en dashboard-inzichten.
+
+## Migratie van API-key opslag (v1.1+)
+- `ddo_api_key_primary` en `ddo_api_key_secondary` worden bij opslaan versleuteld opgeslagen.
+- Bestaande plaintext API-keys worden automatisch gemigreerd:
+  - éénmalig tijdens activatie/opstart (upgradepad), en
+  - als veilige fallback tijdens uitlezen (migratie-on-read).
+- In de instellingen-UI worden bestaande sleutels niet teruggetoond; laat een wachtwoordveld leeg om de huidige sleutel ongewijzigd te laten.
+- Rollback-gedrag: als je teruggaat naar een oudere pluginversie zonder decryptielaag, dan zijn de opgeslagen (versleutelde) sleutels niet direct bruikbaar totdat je opnieuw plaintext sleutels invoert of terugkeert naar een versie met decryptie-ondersteuning.
 
 Dit document biedt een gedetailleerd overzicht en stappenplan voor de ontwikkeling van de Data-Driven Optimizer (DDO) WordPress-plugin. De plugin:
 Verzamelt en analyseert data uit Facebook (inclusief Pixel), Google Ads & Analytics en je WordPress-omgeving.
