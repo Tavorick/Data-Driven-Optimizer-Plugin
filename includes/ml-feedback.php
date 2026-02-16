@@ -145,6 +145,27 @@ function ddo_store_feedback_payload( $payload ) {
         return new WP_Error( 'ddo_feedback_event_missing', __( 'Feedback event is verplicht.', 'data-driven-optimizer' ), array( 'status' => 400 ) );
     }
 
+    if ( strlen( $prepared['event'] ) < 2 || strlen( $prepared['event'] ) > 50 ) {
+        return new WP_Error( 'ddo_feedback_event_length_invalid', __( 'Feedback event moet tussen 2 en 50 tekens lang zijn.', 'data-driven-optimizer' ), array( 'status' => 422 ) );
+    }
+
+    if ( 1 !== preg_match( '/^[a-z][a-z0-9_-]*$/', $prepared['event'] ) ) {
+        return new WP_Error( 'ddo_feedback_event_format_invalid', __( 'Feedback event bevat ongeldige tekens.', 'data-driven-optimizer' ), array( 'status' => 422 ) );
+    }
+
+    if ( $prepared['score'] < 0 || $prepared['score'] > 10 ) {
+        return new WP_Error( 'ddo_feedback_score_range_invalid', __( 'Feedback score moet tussen 0 en 10 liggen.', 'data-driven-optimizer' ), array( 'status' => 422 ) );
+    }
+
+
+    if ( strlen( $prepared['campaignId'] ) > 80 ) {
+        return new WP_Error( 'ddo_feedback_campaign_id_length_invalid', __( 'Feedback campaign_id mag maximaal 80 tekens bevatten.', 'data-driven-optimizer' ), array( 'status' => 422 ) );
+    }
+
+    if ( strlen( $prepared['adId'] ) > 80 ) {
+        return new WP_Error( 'ddo_feedback_ad_id_length_invalid', __( 'Feedback ad_id mag maximaal 80 tekens bevatten.', 'data-driven-optimizer' ), array( 'status' => 422 ) );
+    }
+
     $feedback_table = $wpdb->prefix . 'ddo_feedback';
 
     $result = $wpdb->insert(
