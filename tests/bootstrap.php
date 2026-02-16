@@ -225,7 +225,7 @@ function get_option( $name, $default = false ) {
     return array_key_exists( $name, $ddo_test_state['options'] ) ? $ddo_test_state['options'][ $name ] : $default;
 }
 
-function update_option( $name, $value ) {
+function update_option( $name, $value, $autoload = null ) {
     global $ddo_test_state;
     $ddo_test_state['options'][ $name ] = $value;
     return true;

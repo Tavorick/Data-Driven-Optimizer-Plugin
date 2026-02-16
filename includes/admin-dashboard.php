@@ -122,6 +122,10 @@ function ddo_render_admin_page() {
             <h2><?php esc_html_e( 'Scheduler', 'data-driven-optimizer' ); ?></h2>
             <h3><?php esc_html_e( 'Scheduler status', 'data-driven-optimizer' ); ?></h3>
             <?php ddo_render_scheduler_status_block(); ?>
+            <h3><?php esc_html_e( "Operationele KPI's", 'data-driven-optimizer' ); ?></h3>
+            <?php ddo_render_scheduler_kpi_block(); ?>
+            <h3><?php esc_html_e( 'Recente scheduler events', 'data-driven-optimizer' ); ?></h3>
+            <?php ddo_render_recent_scheduler_events_block(); ?>
         </section>
 
         <section id="ddo-section-feedback" class="ddo-admin-section">
@@ -410,25 +414,192 @@ function ddo_render_scheduler_action_notice() {
  * @param string $last_error_message Laatste foutmelding.
  * @return string
  */
-function ddo_get_scheduler_stale_cause_text( $last_success, $seconds_since_ok, $stale_threshold, $last_error_message ) {
+function ddo_get_scheduler_stale_cause_text( $last_success, $seconds_since_ok, $stale_threshold, $last_error_message, $expected_interval = HOUR_IN_SECONDS ) {
     if ( $last_success <= 0 ) {
-        return __( 'Nog geen succesvolle run geregistreerd.', 'data-driven-optimizer' );
+        return sprintf(
+            /* translators: 1: expected interval, 2: stale threshold. */
+            __( 'Nog geen succesvolle run geregistreerd. Verwachte interval: %1$s, stale na %2$s.', 'data-driven-optimizer' ),
+            human_time_diff( 0, max( HOUR_IN_SECONDS, (int) $expected_interval ) ),
+            human_time_diff( 0, max( HOUR_IN_SECONDS, (int) $stale_threshold ) )
+        );
     }
 
     if ( '' !== $last_error_message ) {
         return sprintf(
-            /* translators: %s: laatste foutmelding. */
-            __( 'Laatste fout: %s', 'data-driven-optimizer' ),
-            $last_error_message
+            /* translators: 1: foutmelding, 2: expected interval, 3: stale threshold. */
+            __( 'Laatste fout: %1$s. Verwachte interval: %2$s, stale na %3$s.', 'data-driven-optimizer' ),
+            $last_error_message,
+            human_time_diff( 0, max( HOUR_IN_SECONDS, (int) $expected_interval ) ),
+            human_time_diff( 0, max( HOUR_IN_SECONDS, (int) $stale_threshold ) )
         );
     }
 
     return sprintf(
-        /* translators: 1: verstreken tijd, 2: verwachte drempel. */
-        __( 'Geen succesvolle run in %1$s (drempel: %2$s).', 'data-driven-optimizer' ),
+        /* translators: 1: verstreken tijd, 2: expected interval, 3: stale threshold. */
+        __( 'Geen succesvolle run in %1$s. Verwachte interval: %2$s, stale na %3$s.', 'data-driven-optimizer' ),
         human_time_diff( time() - $seconds_since_ok, time() ),
-        human_time_diff( 0, $stale_threshold )
+        human_time_diff( 0, max( HOUR_IN_SECONDS, (int) $expected_interval ) ),
+        human_time_diff( 0, max( HOUR_IN_SECONDS, (int) $stale_threshold ) )
     );
+}
+
+/**
+ * Bouw operationele KPI's uit recente scheduler-events.
+ *
+ * @param int $window_days Analyseperiode in dagen.
+ * @return array
+ */
+function ddo_get_scheduler_operational_kpis( $window_days = 30 ) {
+    $events       = ddo_get_recent_scheduler_events( 200 );
+    $window_days  = max( 1, (int) $window_days );
+    $window_start = time() - ( $window_days * DAY_IN_SECONDS );
+    $filtered     = array_filter(
+        $events,
+        function ( $event ) use ( $window_start ) {
+            $timestamp = isset( $event['timestamp'] ) ? (int) $event['timestamp'] : 0;
+            return $timestamp >= $window_start;
+        }
+    );
+
+    $total_runs    = 0;
+    $success_runs  = 0;
+    $durations     = array();
+    $ingest_perday = array();
+
+    foreach ( $filtered as $event ) {
+        $message = isset( $event['message'] ) ? (string) $event['message'] : '';
+        $level   = isset( $event['level'] ) ? (string) $event['level'] : 'info';
+        $context = isset( $event['context'] ) && is_array( $event['context'] ) ? $event['context'] : array();
+
+        if ( 'job-end' === $message || 'job-error' === $message ) {
+            $total_runs++;
+            if ( 'job-end' === $message && 'error' !== $level ) {
+                $success_runs++;
+            }
+
+            if ( isset( $context['duration'] ) ) {
+                $durations[] = max( 0, (float) $context['duration'] );
+            }
+
+            $day_key = gmdate( 'Y-m-d', isset( $event['timestamp'] ) ? (int) $event['timestamp'] : time() );
+            if ( ! isset( $ingest_perday[ $day_key ] ) ) {
+                $ingest_perday[ $day_key ] = 0;
+            }
+            $ingest_perday[ $day_key ] += isset( $context['result_count'] ) ? max( 0, (int) $context['result_count'] ) : 0;
+        }
+    }
+
+    sort( $durations );
+    $median_duration = 0;
+    $duration_count  = count( $durations );
+
+    if ( $duration_count > 0 ) {
+        $middle = (int) floor( $duration_count / 2 );
+        if ( 0 === $duration_count % 2 ) {
+            $median_duration = ( $durations[ $middle - 1 ] + $durations[ $middle ] ) / 2;
+        } else {
+            $median_duration = $durations[ $middle ];
+        }
+    }
+
+    ksort( $ingest_perday );
+
+    return array(
+        'window_days'     => $window_days,
+        'total_runs'      => $total_runs,
+        'success_runs'    => $success_runs,
+        'success_rate'    => $total_runs > 0 ? ( $success_runs / $total_runs ) * 100 : 0,
+        'median_duration' => $median_duration,
+        'ingest_per_day'  => $ingest_perday,
+    );
+}
+
+/**
+ * Render operationele KPI kaarten en ingest-volume per dag.
+ */
+function ddo_render_scheduler_kpi_block() {
+    $kpis = ddo_get_scheduler_operational_kpis( 30 );
+    ?>
+    <div class="ddo-feedback-cards">
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Run success rate (30d)', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( (float) $kpis['success_rate'], 2 ) ); ?>%</p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Median duration (30d)', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( ddo_format_scheduler_duration_seconds( (float) $kpis['median_duration'] ) ); ?></p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Runs geanalyseerd (30d)', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( (int) $kpis['total_runs'] ) ); ?></p>
+        </div>
+    </div>
+    <table class="widefat striped ddo-scheduler-table">
+        <thead>
+            <tr>
+                <th><?php esc_html_e( 'Dag', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Ingest volume', 'data-driven-optimizer' ); ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if ( empty( $kpis['ingest_per_day'] ) ) : ?>
+                <tr>
+                    <td colspan="2"><?php esc_html_e( 'Nog geen scheduler run-data beschikbaar.', 'data-driven-optimizer' ); ?></td>
+                </tr>
+            <?php else : ?>
+                <?php foreach ( $kpis['ingest_per_day'] as $day => $volume ) : ?>
+                    <tr>
+                        <td><?php echo esc_html( $day ); ?></td>
+                        <td><?php echo esc_html( number_format_i18n( (int) $volume ) ); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+    <?php
+}
+
+/**
+ * Render laatste scheduler events (runs en fouten).
+ */
+function ddo_render_recent_scheduler_events_block() {
+    $events = ddo_get_recent_scheduler_events( 20 );
+
+    if ( empty( $events ) ) {
+        echo '<p>' . esc_html__( 'Nog geen scheduler events geregistreerd.', 'data-driven-optimizer' ) . '</p>';
+        return;
+    }
+    ?>
+    <table class="widefat striped ddo-scheduler-table">
+        <thead>
+            <tr>
+                <th><?php esc_html_e( 'Tijd', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Job', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Event', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Status', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Duur', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Resultaat', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Error code', 'data-driven-optimizer' ); ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ( $events as $event ) : ?>
+                <?php
+                $context = isset( $event['context'] ) && is_array( $event['context'] ) ? $event['context'] : array();
+                ?>
+                <tr>
+                    <td><?php echo esc_html( wp_date( 'Y-m-d H:i:s', isset( $event['timestamp'] ) ? (int) $event['timestamp'] : 0 ) ); ?></td>
+                    <td><code><?php echo esc_html( isset( $event['job_name'] ) ? (string) $event['job_name'] : '' ); ?></code></td>
+                    <td><?php echo esc_html( isset( $event['message'] ) ? (string) $event['message'] : '' ); ?></td>
+                    <td><?php echo esc_html( isset( $event['level'] ) ? strtoupper( (string) $event['level'] ) : 'INFO' ); ?></td>
+                    <td><?php echo esc_html( ddo_format_scheduler_duration_seconds( isset( $context['duration'] ) ? (float) $context['duration'] : 0 ) ); ?></td>
+                    <td><?php echo esc_html( number_format_i18n( isset( $context['result_count'] ) ? (int) $context['result_count'] : 0 ) ); ?></td>
+                    <td><?php echo '' !== ( isset( $context['error_code'] ) ? (string) $context['error_code'] : '' ) ? esc_html( (string) $context['error_code'] ) : '&mdash;'; ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php
 }
 
 /**
@@ -478,6 +649,7 @@ function ddo_render_scheduler_status_block() {
             'last_error_message',
             'last_duration',
             'next_run',
+            'expected_interval',
             'stale_threshold',
             'seconds_since_ok',
             'is_stale'
@@ -552,7 +724,7 @@ function ddo_render_scheduler_status_block() {
                         </span>
                         <?php if ( $item['is_stale'] ) : ?>
                             <p class="description">
-                                <?php echo esc_html( ddo_get_scheduler_stale_cause_text( $item['last_success'], $item['seconds_since_ok'], $item['stale_threshold'], $item['last_error_message'] ) ); ?>
+                                <?php echo esc_html( ddo_get_scheduler_stale_cause_text( $item['last_success'], $item['seconds_since_ok'], $item['stale_threshold'], $item['last_error_message'], $item['expected_interval'] ) ); ?>
                             </p>
                         <?php endif; ?>
                     </td>

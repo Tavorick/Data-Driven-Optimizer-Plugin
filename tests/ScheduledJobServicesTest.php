@@ -134,6 +134,27 @@ class ScheduledJobServicesTest extends TestCase {
         $this->assertArrayNotHasKey( 'last_result', $metadata['ddo_daily_introspect'] );
     }
 
+
+    public function test_scheduler_log_event_adds_consistent_context_fields(): void {
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'custom-event',
+            'info',
+            array(
+                'processed_count' => 5,
+                'duration_ms'     => 250,
+            )
+        );
+
+        $events = ddo_get_recent_scheduler_events( 1 );
+
+        $this->assertCount( 1, $events );
+        $this->assertSame( 'ddo_hourly_fetch', $events[0]['context']['job'] );
+        $this->assertSame( 5, $events[0]['context']['result_count'] );
+        $this->assertSame( 0.25, $events[0]['context']['duration'] );
+        $this->assertSame( '', $events[0]['context']['error_code'] );
+    }
+
     public function test_placeholder_actions_are_not_present_anymore(): void {
         $api_handlers = file_get_contents( dirname( __DIR__ ) . '/includes/api-handlers.php' );
         $ml_feedback  = file_get_contents( dirname( __DIR__ ) . '/includes/ml-feedback.php' );

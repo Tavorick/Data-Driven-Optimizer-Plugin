@@ -132,8 +132,8 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
     ddo_log_scheduler_event( $job_name, 'job-start' );
 
     try {
-        call_user_func( $callback );
-
+        $result   = call_user_func( $callback );
+        $result   = is_array( $result ) ? $result : array();
         $duration = max( 0, microtime( true ) - $started_at );
 
         ddo_update_scheduler_job_metadata(
@@ -142,10 +142,20 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
                 'last_success'       => time(),
                 'last_run_duration'  => round( $duration, 3 ),
                 'last_error_message' => '',
+                'last_result'        => $result,
             )
         );
 
-        ddo_log_scheduler_event( $job_name, 'job-end' );
+        ddo_log_scheduler_event(
+            $job_name,
+            'job-end',
+            'info',
+            array(
+                'duration'     => round( $duration, 3 ),
+                'result_count' => ddo_extract_scheduler_result_count( $result ),
+                'error_code'   => isset( $result['error_code'] ) ? (string) $result['error_code'] : '',
+            )
+        );
     } catch ( Exception $exception ) {
         $duration = max( 0, microtime( true ) - $started_at );
 
@@ -163,8 +173,9 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
             'job-error',
             'error',
             array(
-                'message' => $exception->getMessage(),
-                'code'    => $exception->getCode(),
+                'duration'   => round( $duration, 3 ),
+                'message'    => $exception->getMessage(),
+                'error_code' => (string) $exception->getCode(),
             )
         );
     } catch ( Error $error ) {
@@ -184,9 +195,32 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
             'job-error',
             'error',
             array(
-                'message' => $error->getMessage(),
-                'code'    => $error->getCode(),
+                'duration'   => round( $duration, 3 ),
+                'message'    => $error->getMessage(),
+                'error_code' => (string) $error->getCode(),
             )
         );
     }
+}
+
+/**
+ * Extraheer het genormaliseerde resultaatvolume uit schedulerresultaten.
+ *
+ * @param array $result Resultaatpayload.
+ * @return int
+ */
+function ddo_extract_scheduler_result_count( $result ) {
+    if ( isset( $result['result_count'] ) ) {
+        return max( 0, (int) $result['result_count'] );
+    }
+
+    if ( isset( $result['processed_count'] ) ) {
+        return max( 0, (int) $result['processed_count'] );
+    }
+
+    if ( isset( $result['deleted_rows'] ) ) {
+        return max( 0, (int) $result['deleted_rows'] );
+    }
+
+    return 0;
 }
