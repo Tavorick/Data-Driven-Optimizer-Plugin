@@ -44,8 +44,8 @@ class WP_REST_Request {
     }
 }
 
-function __( $text ) {
-    return $text;
+function __( $text, $domain = null ) {
+    return (string) $text;
 }
 
 function add_action() {}
@@ -53,9 +53,28 @@ function add_filter() {}
 function register_setting() {}
 function add_settings_section() {}
 function add_settings_field() {}
-function checked() {}
-function esc_html_e() {}
+function checked( $checked, $current = true, $display = true ) {
+    $result = ( (string) $checked === (string) $current ) ? 'checked="checked"' : '';
+
+    if ( $display ) {
+        echo $result;
+    }
+
+    return $result;
+}
+
+function esc_html_e( $text, $domain = null ) {
+    echo (string) $text;
+}
+function esc_html__( $text, $domain = null ) { return (string) $text; }
 function esc_attr( $value ) { return $value; }
+function esc_attr_e( $text, $domain = null ) {
+    echo (string) $text;
+}
+function esc_html( $text ) { return (string) $text; }
+function number_format_i18n( $number, $decimals = 0 ) {
+    return number_format( (float) $number, (int) $decimals, '.', ',' );
+}
 function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function sanitize_key( $value ) {
     $value = strtolower( (string) $value );
