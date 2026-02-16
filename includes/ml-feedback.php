@@ -194,42 +194,257 @@ function ddo_store_feedback_payload( $payload ) {
 /**
  * Geef geaggregeerde feedbackdata terug voor dashboard/API.
  *
+ * @param array $filters Optionele filters voor periode en sortering.
  * @return array
  */
-function ddo_get_feedback_summary() {
+function ddo_get_feedback_summary( $filters = array() ) {
     global $wpdb;
 
     $feedback_table = $wpdb->prefix . 'ddo_feedback';
+    $normalized     = ddo_normalize_feedback_filters( $filters );
 
-    $totals = $wpdb->get_row(
-        "SELECT COUNT(*) AS total_items, ROUND(AVG(score), 2) AS average_score FROM {$feedback_table}", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        ARRAY_A
-    );
+    if ( ! method_exists( $wpdb, 'get_row' ) || ! method_exists( $wpdb, 'get_results' ) ) {
+        $rows = isset( $wpdb->feedback_rows ) && is_array( $wpdb->feedback_rows ) ? $wpdb->feedback_rows : array();
 
-    $event_rows = $wpdb->get_results(
-        "SELECT event_name, COUNT(*) AS total_items, ROUND(AVG(score), 2) AS average_score
+        return ddo_build_feedback_summary_from_rows( $rows, $normalized );
+    }
+
+    $where_clause = '';
+    $where_args   = array();
+
+    if ( $normalized['days'] > 0 ) {
+        $where_clause = ' WHERE feedback_date >= %s';
+        $where_args[] = gmdate( 'Y-m-d', time() - ( $normalized['days'] * DAY_IN_SECONDS ) );
+    }
+
+    $totals_query = "SELECT
+        COUNT(*) AS total_items,
+        ROUND(AVG(score), 2) AS average_score,
+        MAX(score) AS highest_score,
+        MIN(score) AS lowest_score,
+        SUM(CASE WHEN score IS NULL THEN 1 ELSE 0 END) AS unscored_items
+        FROM {$feedback_table}{$where_clause}";
+
+    if ( ! empty( $where_args ) ) {
+        $totals_query = $wpdb->prepare( $totals_query, $where_args );
+    }
+
+    $totals = $wpdb->get_row( $totals_query, ARRAY_A );
+
+    $event_order = 'total_items DESC';
+    if ( 'score_desc' === $normalized['sort'] ) {
+        $event_order = 'average_score DESC, total_items DESC';
+    }
+
+    $events_query = "SELECT event_name, COUNT(*) AS total_items, ROUND(AVG(score), 2) AS average_score
         FROM {$feedback_table}
-        WHERE event_name <> ''
+        WHERE event_name <> ''";
+
+    if ( ! empty( $where_args ) ) {
+        $events_query .= ' AND feedback_date >= %s';
+    }
+
+    $events_query .= "
         GROUP BY event_name
-        ORDER BY total_items DESC
-        LIMIT 5", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        ARRAY_A
-    );
+        ORDER BY {$event_order}
+        LIMIT 5";
 
-    $recent_rows = $wpdb->get_results(
-        "SELECT id, event_name, score, feedback_date, status, campaign_id, ad_id
-        FROM {$feedback_table}
+    if ( ! empty( $where_args ) ) {
+        $events_query = $wpdb->prepare( $events_query, $where_args );
+    }
+
+    $event_rows = $wpdb->get_results( $events_query, ARRAY_A );
+
+    $recent_query = "SELECT id, event_name, score, feedback_date, status, campaign_id, ad_id
+        FROM {$feedback_table}{$where_clause}
         ORDER BY id DESC
-        LIMIT 10", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-        ARRAY_A
-    );
+        LIMIT 10";
+
+    if ( ! empty( $where_args ) ) {
+        $recent_query = $wpdb->prepare( $recent_query, $where_args );
+    }
+
+    $recent_rows = $wpdb->get_results( $recent_query, ARRAY_A );
 
     return array(
         'totals' => array(
             'count'        => isset( $totals['total_items'] ) ? (int) $totals['total_items'] : 0,
             'averageScore' => isset( $totals['average_score'] ) ? (float) $totals['average_score'] : 0,
+            'highestScore' => isset( $totals['highest_score'] ) ? (float) $totals['highest_score'] : 0,
+            'lowestScore'  => isset( $totals['lowest_score'] ) ? (float) $totals['lowest_score'] : 0,
+            'unscored'     => isset( $totals['unscored_items'] ) ? (int) $totals['unscored_items'] : 0,
         ),
         'events' => is_array( $event_rows ) ? $event_rows : array(),
         'recent' => is_array( $recent_rows ) ? $recent_rows : array(),
+        'filters' => $normalized,
     );
+}
+
+/**
+ * Normaliseer filters voor feedbackrapportage.
+ *
+ * @param array $filters Inkomende filterwaarden.
+ * @return array
+ */
+function ddo_normalize_feedback_filters( $filters ) {
+    $filters = is_array( $filters ) ? $filters : array();
+    $days    = isset( $filters['days'] ) ? (int) $filters['days'] : 30;
+    $sort    = isset( $filters['sort'] ) ? sanitize_key( $filters['sort'] ) : 'count_desc';
+
+    $allowed_days = array( 0, 7, 30 );
+    if ( ! in_array( $days, $allowed_days, true ) ) {
+        $days = 30;
+    }
+
+    $allowed_sort = array( 'count_desc', 'score_desc' );
+    if ( ! in_array( $sort, $allowed_sort, true ) ) {
+        $sort = 'count_desc';
+    }
+
+    return array(
+        'days' => $days,
+        'sort' => $sort,
+    );
+}
+
+/**
+ * Bouw dashboardsamenvatting op uit een dataset.
+ *
+ * @param array $rows     Dataset met feedbackregels.
+ * @param array $filters  Genormaliseerde filters.
+ * @return array
+ */
+function ddo_build_feedback_summary_from_rows( $rows, $filters ) {
+    $filtered_rows = ddo_filter_feedback_rows( $rows, $filters );
+    $totals        = ddo_calculate_feedback_totals( $filtered_rows );
+    $events        = ddo_aggregate_feedback_events( $filtered_rows, $filters['sort'] );
+    $recent_rows   = $filtered_rows;
+
+    usort(
+        $recent_rows,
+        function ( $left, $right ) {
+            return (int) $right['id'] <=> (int) $left['id'];
+        }
+    );
+
+    return array(
+        'totals' => $totals,
+        'events' => array_slice( $events, 0, 5 ),
+        'recent' => array_slice( $recent_rows, 0, 10 ),
+        'filters' => $filters,
+    );
+}
+
+/**
+ * Filter feedbackregels op basis van periode.
+ *
+ * @param array $rows    Feedbackregels.
+ * @param array $filters Genormaliseerde filters.
+ * @return array
+ */
+function ddo_filter_feedback_rows( $rows, $filters ) {
+    if ( empty( $filters['days'] ) ) {
+        return $rows;
+    }
+
+    $cutoff = gmdate( 'Y-m-d', time() - ( (int) $filters['days'] * DAY_IN_SECONDS ) );
+
+    return array_values(
+        array_filter(
+            $rows,
+            function ( $row ) use ( $cutoff ) {
+                return isset( $row['feedback_date'] ) && $row['feedback_date'] >= $cutoff;
+            }
+        )
+    );
+}
+
+/**
+ * Bereken totaal-KPI's over feedbackregels.
+ *
+ * @param array $rows Feedbackregels.
+ * @return array
+ */
+function ddo_calculate_feedback_totals( $rows ) {
+    $scores       = array();
+    $unscored     = 0;
+    $total_count  = count( $rows );
+
+    foreach ( $rows as $row ) {
+        $has_score = isset( $row['score'] ) && '' !== $row['score'] && null !== $row['score'];
+
+        if ( ! $has_score ) {
+            $unscored++;
+            continue;
+        }
+
+        $scores[] = (float) $row['score'];
+    }
+
+    return array(
+        'count'        => $total_count,
+        'averageScore' => ! empty( $scores ) ? round( array_sum( $scores ) / count( $scores ), 2 ) : 0,
+        'highestScore' => ! empty( $scores ) ? max( $scores ) : 0,
+        'lowestScore'  => ! empty( $scores ) ? min( $scores ) : 0,
+        'unscored'     => $unscored,
+    );
+}
+
+/**
+ * Aggregeer feedbackregels per event.
+ *
+ * @param array  $rows Feedbackregels.
+ * @param string $sort Sorteervolgorde.
+ * @return array
+ */
+function ddo_aggregate_feedback_events( $rows, $sort ) {
+    $events = array();
+
+    foreach ( $rows as $row ) {
+        if ( empty( $row['event_name'] ) ) {
+            continue;
+        }
+
+        $event_name = (string) $row['event_name'];
+        if ( ! isset( $events[ $event_name ] ) ) {
+            $events[ $event_name ] = array(
+                'event_name'   => $event_name,
+                'total_items'  => 0,
+                'score_sum'    => 0,
+                'score_count'  => 0,
+                'average_score'=> 0,
+            );
+        }
+
+        $events[ $event_name ]['total_items']++;
+
+        if ( isset( $row['score'] ) && '' !== $row['score'] && null !== $row['score'] ) {
+            $events[ $event_name ]['score_sum']   += (float) $row['score'];
+            $events[ $event_name ]['score_count'] += 1;
+        }
+    }
+
+    foreach ( $events as &$event_row ) {
+        $event_row['average_score'] = $event_row['score_count'] > 0 ? round( $event_row['score_sum'] / $event_row['score_count'], 2 ) : 0;
+        unset( $event_row['score_sum'], $event_row['score_count'] );
+    }
+    unset( $event_row );
+
+    $events = array_values( $events );
+
+    usort(
+        $events,
+        function ( $left, $right ) use ( $sort ) {
+            if ( 'score_desc' === $sort ) {
+                $score_compare = (float) $right['average_score'] <=> (float) $left['average_score'];
+                if ( 0 !== $score_compare ) {
+                    return $score_compare;
+                }
+            }
+
+            return (int) $right['total_items'] <=> (int) $left['total_items'];
+        }
+    );
+
+    return $events;
 }
