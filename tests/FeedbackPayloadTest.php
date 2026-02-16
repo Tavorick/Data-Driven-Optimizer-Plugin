@@ -177,4 +177,176 @@ class FeedbackPayloadTest extends TestCase {
         $this->assertSame( 0.0, $totals['lowestScore'] );
         $this->assertSame( 1, $totals['unscored'] );
     }
+
+    public function test_get_feedback_summary_sql_route_applies_days_filter_and_count_sort(): void {
+        global $wpdb;
+
+        $wpdb->feedback_rows = array(
+            array(
+                'id'            => 1,
+                'event_name'    => 'purchase',
+                'score'         => 8,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d', time() - DAY_IN_SECONDS ),
+                'status'        => 'open',
+                'campaign_id'   => 'c1',
+                'ad_id'         => 'a1',
+            ),
+            array(
+                'id'            => 2,
+                'event_name'    => 'purchase',
+                'score'         => 6,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d', time() - 2 * DAY_IN_SECONDS ),
+                'status'        => 'open',
+                'campaign_id'   => 'c1',
+                'ad_id'         => 'a2',
+            ),
+            array(
+                'id'            => 3,
+                'event_name'    => 'view',
+                'score'         => null,
+                'is_scored'     => 0,
+                'feedback_date' => gmdate( 'Y-m-d', time() - 3 * DAY_IN_SECONDS ),
+                'status'        => 'open',
+                'campaign_id'   => 'c2',
+                'ad_id'         => 'a3',
+            ),
+            array(
+                'id'            => 4,
+                'event_name'    => 'old',
+                'score'         => 10,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d', time() - 40 * DAY_IN_SECONDS ),
+                'status'        => 'open',
+                'campaign_id'   => 'c3',
+                'ad_id'         => 'a4',
+            ),
+        );
+
+        $summary = ddo_get_feedback_summary(
+            array(
+                'days' => 7,
+                'sort' => 'count_desc',
+            )
+        );
+
+        $this->assertCount( 3, $wpdb->prepared );
+        $this->assertStringContainsString( 'WHERE feedback_date >=', $wpdb->prepared[0]['query'] );
+        $this->assertStringContainsString( "ORDER BY total_items DESC", $wpdb->select_queries[1] );
+        $this->assertSame( 3, $summary['totals']['count'] );
+        $this->assertSame( 7.0, $summary['totals']['averageScore'] );
+        $this->assertSame( 8.0, $summary['totals']['highestScore'] );
+        $this->assertSame( 6.0, $summary['totals']['lowestScore'] );
+        $this->assertSame( 1, $summary['totals']['unscored'] );
+        $this->assertSame( 'purchase', $summary['events'][0]['event_name'] );
+        $this->assertSame( 2, (int) $summary['events'][0]['total_items'] );
+        $this->assertSame( 3, $summary['recent'][0]['id'] );
+        $this->assertSame( array( 'days' => 7, 'sort' => 'count_desc' ), $summary['filters'] );
+    }
+
+    public function test_get_feedback_summary_sql_route_applies_score_sort(): void {
+        global $wpdb;
+
+        $wpdb->feedback_rows = array(
+            array(
+                'id'            => 1,
+                'event_name'    => 'bulk',
+                'score'         => 6,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+                'status'        => 'open',
+                'campaign_id'   => 'c1',
+                'ad_id'         => 'a1',
+            ),
+            array(
+                'id'            => 2,
+                'event_name'    => 'bulk',
+                'score'         => 6,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+                'status'        => 'open',
+                'campaign_id'   => 'c1',
+                'ad_id'         => 'a2',
+            ),
+            array(
+                'id'            => 3,
+                'event_name'    => 'premium',
+                'score'         => 10,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+                'status'        => 'open',
+                'campaign_id'   => 'c2',
+                'ad_id'         => 'a3',
+            ),
+        );
+
+        $summary = ddo_get_feedback_summary(
+            array(
+                'days' => 0,
+                'sort' => 'score_desc',
+            )
+        );
+
+        $this->assertCount( 0, $wpdb->prepared );
+        $this->assertStringContainsString( 'ORDER BY average_score DESC, total_items DESC', $wpdb->select_queries[1] );
+        $this->assertSame( 'premium', $summary['events'][0]['event_name'] );
+        $this->assertSame( 10.0, (float) $summary['events'][0]['average_score'] );
+        $this->assertSame( 'bulk', $summary['events'][1]['event_name'] );
+        $this->assertSame( 6.0, (float) $summary['events'][1]['average_score'] );
+        $this->assertSame( array( 'days' => 0, 'sort' => 'score_desc' ), $summary['filters'] );
+    }
+
+    public function test_get_feedback_summary_sql_route_empty_dataset_keeps_contract(): void {
+        $summary = ddo_get_feedback_summary(
+            array(
+                'days' => 30,
+                'sort' => 'count_desc',
+            )
+        );
+
+        $this->assertSame(
+            array(
+                'count'        => 0,
+                'averageScore' => 0.0,
+                'highestScore' => 0.0,
+                'lowestScore'  => 0.0,
+                'unscored'     => 0,
+            ),
+            $summary['totals']
+        );
+        $this->assertSame( array(), $summary['events'] );
+        $this->assertSame( array(), $summary['recent'] );
+        $this->assertSame( array( 'days' => 30, 'sort' => 'count_desc' ), $summary['filters'] );
+    }
+
+    public function test_get_feedback_summary_sql_route_limits_recent_and_events_results(): void {
+        global $wpdb;
+
+        for ( $id = 1; $id <= 12; $id++ ) {
+            $wpdb->feedback_rows[] = array(
+                'id'            => $id,
+                'event_name'    => 'event_' . $id,
+                'score'         => $id % 2,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+                'status'        => 'open',
+                'campaign_id'   => 'c' . $id,
+                'ad_id'         => 'a' . $id,
+            );
+        }
+
+        $summary = ddo_get_feedback_summary(
+            array(
+                'days' => 0,
+                'sort' => 'count_desc',
+            )
+        );
+
+        $this->assertCount( 5, $summary['events'] );
+        $this->assertCount( 10, $summary['recent'] );
+        $this->assertSame( 12, $summary['totals']['count'] );
+        $this->assertSame( 12, $summary['recent'][0]['id'] );
+        $this->assertSame( 3, $summary['recent'][9]['id'] );
+    }
 }
