@@ -16,6 +16,8 @@ $ddo_test_state = array(
     'scheduled'         => array(),
     'scheduled_calls'   => array(),
     'cleared_hooks'     => array(),
+    'verified_nonces'   => array(),
+    'actions_run'       => array(),
 );
 
 class WP_Error {
@@ -58,6 +60,22 @@ function sanitize_text_field( $value ) { return trim( strip_tags( (string) $valu
 function sanitize_key( $value ) {
     $value = strtolower( (string) $value );
     return preg_replace( '/[^a-z0-9_-]/', '', $value );
+}
+
+function wp_unslash( $value ) {
+    return $value;
+}
+
+function wp_verify_nonce( $nonce, $action ) {
+    global $ddo_test_state;
+
+    return isset( $ddo_test_state['verified_nonces'][ $action ] )
+        && $ddo_test_state['verified_nonces'][ $action ] === $nonce;
+}
+
+function do_action( $hook ) {
+    global $ddo_test_state;
+    $ddo_test_state['actions_run'][] = $hook;
 }
 function wp_salt( $scheme = '' ) { return 'salt-' . $scheme; }
 function wp_hash( $value ) { return hash( 'sha256', (string) $value ); }
@@ -134,3 +152,4 @@ require_once dirname( __DIR__ ) . '/includes/settings.php';
 require_once dirname( __DIR__ ) . '/includes/api-handlers.php';
 require_once dirname( __DIR__ ) . '/includes/ml-feedback.php';
 require_once dirname( __DIR__ ) . '/includes/cron.php';
+require_once dirname( __DIR__ ) . '/includes/admin-dashboard.php';
