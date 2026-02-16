@@ -24,7 +24,7 @@ function ddo_register_rest_routes() {
         array(
             'methods'             => 'GET',
             'callback'            => 'ddo_api_get_status',
-            'permission_callback' => '__return_true',
+            'permission_callback' => 'ddo_api_manage_options_permission',
         )
     );
 }
@@ -35,15 +35,22 @@ function ddo_register_rest_routes() {
  * @return WP_REST_Response
  */
 function ddo_api_get_status() {
-    $options = get_option( 'ddo_options', array() );
-
     return rest_ensure_response(
         array(
             'plugin'  => 'data-driven-optimizer',
             'version' => DDO_PLUGIN_VERSION,
-            'enabled' => ! empty( $options['enabled'] ),
+            'enabled' => (bool) get_option( 'ddo_enabled', true ),
         )
     );
+}
+
+/**
+ * Controleer REST API permissies voor admin-status.
+ *
+ * @return bool
+ */
+function ddo_api_manage_options_permission() {
+    return current_user_can( 'manage_options' );
 }
 
 /**

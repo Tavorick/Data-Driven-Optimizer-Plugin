@@ -35,13 +35,22 @@ function ddo_activate_plugin() {
 
     ddo_register_cron_events();
 
-    if ( false === get_option( 'ddo_options' ) ) {
-        add_option(
-            'ddo_options',
-            array(
-                'enabled' => true,
-            )
-        );
+    if ( false === get_option( 'ddo_enabled' ) ) {
+        add_option( 'ddo_enabled', true );
+    }
+
+    if ( false === get_option( 'ddo_api_key_primary' ) ) {
+        add_option( 'ddo_api_key_primary', '' );
+    }
+
+    if ( false === get_option( 'ddo_api_key_secondary' ) ) {
+        add_option( 'ddo_api_key_secondary', '' );
+    }
+
+    $legacy_options = get_option( 'ddo_options', array() );
+
+    if ( is_array( $legacy_options ) && array_key_exists( 'enabled', $legacy_options ) ) {
+        update_option( 'ddo_enabled', ! empty( $legacy_options['enabled'] ) );
     }
 }
 register_activation_hook( DDO_PLUGIN_FILE, 'ddo_activate_plugin' );
