@@ -6,6 +6,8 @@ class RenderOutputSnapshotTest extends TestCase {
     protected function setUp(): void {
         global $ddo_test_state;
         $ddo_test_state['options'] = array();
+        $ddo_test_state['scheduled'] = array();
+        $_GET = array();
     }
 
     public function test_render_enabled_field_matches_snapshot_like_output(): void {
@@ -85,6 +87,47 @@ class RenderOutputSnapshotTest extends TestCase {
         $this->assertStringContainsString( '<td>cta_click</td>', $filledOutput );
         $this->assertStringContainsString( '<td>4</td>', $filledOutput );
         $this->assertStringContainsString( '<td>8.50</td>', $filledOutput );
+    }
+
+
+
+    public function test_render_scheduler_action_notice_nonce_invalid_snapshot_like_output(): void {
+        $_GET = array(
+            'ddo_scheduler_notice' => 'nonce_invalid',
+            'ddo_scheduler_job'    => 'ddo_hourly_fetch',
+        );
+
+        ob_start();
+        ddo_render_scheduler_action_notice();
+        $output = $this->normalizeHtml( ob_get_clean() );
+
+        $this->assertSame(
+            '<div class="notice notice-error is-dismissible"><p>Nonce-validatie mislukt voor scheduler job: ddo_hourly_fetch.</p></div>',
+            $output
+        );
+    }
+
+    public function test_render_scheduler_status_block_stale_snapshot_like_output(): void {
+        update_option(
+            'ddo_scheduler_job_metadata',
+            array(
+                'ddo_hourly_fetch' => array(
+                    'last_start'         => time() - 8 * HOUR_IN_SECONDS,
+                    'last_success'       => time() - 8 * HOUR_IN_SECONDS,
+                    'last_run_duration'  => 0.4,
+                    'last_error_message' => 'Timeout bij upstream bron',
+                ),
+            )
+        );
+
+        ob_start();
+        ddo_render_scheduler_status_block();
+        $output = $this->normalizeHtml( ob_get_clean() );
+
+        $this->assertStringContainsString( '<h4>Stale jobs</h4>', $output );
+        $this->assertStringContainsString( '<code>ddo_hourly_fetch</code>', $output );
+        $this->assertStringContainsString( 'Scheduler status: Stale', $output );
+        $this->assertStringContainsString( 'Laatste fout: Timeout bij upstream bron', $output );
     }
 
     public function test_format_scheduler_duration_seconds_uses_seconds_label(): void {
