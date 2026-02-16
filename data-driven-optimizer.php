@@ -21,6 +21,10 @@ define( 'DDO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 require_once DDO_PLUGIN_DIR . 'includes/settings.php';
 require_once DDO_PLUGIN_DIR . 'includes/admin-dashboard.php';
 require_once DDO_PLUGIN_DIR . 'includes/api-handlers.php';
+require_once DDO_PLUGIN_DIR . 'includes/ml-feedback.php';
+require_once DDO_PLUGIN_DIR . 'includes/code-introspect.php';
+require_once DDO_PLUGIN_DIR . 'includes/logger.php';
+require_once DDO_PLUGIN_DIR . 'includes/cron.php';
 require_once DDO_PLUGIN_DIR . 'includes/db-schema.php';
 
 /**
@@ -28,6 +32,8 @@ require_once DDO_PLUGIN_DIR . 'includes/db-schema.php';
  */
 function ddo_activate_plugin() {
     ddo_install_database_schema();
+
+    ddo_register_cron_events();
 
     if ( false === get_option( 'ddo_options' ) ) {
         add_option(
@@ -44,6 +50,7 @@ register_activation_hook( DDO_PLUGIN_FILE, 'ddo_activate_plugin' );
  * Opruimactie bij deactivatie.
  */
 function ddo_deactivate_plugin() {
+    ddo_clear_cron_events();
     flush_rewrite_rules();
 }
 register_deactivation_hook( DDO_PLUGIN_FILE, 'ddo_deactivate_plugin' );
@@ -56,5 +63,6 @@ function ddo_init_plugin() {
     ddo_register_settings();
     ddo_register_admin_menu();
     ddo_register_api_routes();
+    ddo_register_cron_callbacks();
 }
 add_action( 'plugins_loaded', 'ddo_init_plugin' );
