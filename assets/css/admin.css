@@ -225,6 +225,58 @@
     filter: brightness(0.97);
 }
 
+
+
+#ddo-ajax-preview-response {
+    margin-top: var(--ddo-space-12);
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font: var(--ddo-type-body);
+    display: none;
+}
+
+#ddo-ajax-preview-response.is-loading,
+#ddo-ajax-preview-response.is-success,
+#ddo-ajax-preview-response.is-error {
+    display: block;
+}
+
+#ddo-ajax-preview-response::before {
+    margin-right: 8px;
+    font-weight: 700;
+}
+
+#ddo-ajax-preview-response.is-loading {
+    background: #f0f6fc;
+    border-color: #c5d9ed;
+    color: #0a4b78;
+}
+
+#ddo-ajax-preview-response.is-loading::before {
+    content: "⏳";
+}
+
+#ddo-ajax-preview-response.is-success {
+    background: #edfaef;
+    border-color: #b5e3bc;
+    color: #207227;
+}
+
+#ddo-ajax-preview-response.is-success::before {
+    content: "✓";
+}
+
+#ddo-ajax-preview-response.is-error {
+    background: #fbeaea;
+    border-color: #f0b8b8;
+    color: #9a1f1f;
+}
+
+#ddo-ajax-preview-response.is-error::before {
+    content: "⚠";
+}
+
 @media (max-width: 782px) {
     .ddo-section-nav {
         position: static;
