@@ -65,7 +65,7 @@ function ddo_enqueue_admin_assets( $hook_suffix ) {
             'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
             'previewNonce' => wp_create_nonce( 'ddo_preview_concept' ),
             'i18n'         => array(
-                'previewFailed' => __( 'Preview ophalen mislukt.', 'data-driven-optimizer' ),
+                'previewFailed' => __( 'Preview ophalen mislukt. Probeer opnieuw of vernieuw de pagina.', 'data-driven-optimizer' ),
             ),
         )
     );
@@ -139,7 +139,7 @@ function ddo_render_admin_page() {
                 <?php wp_nonce_field( 'ddo_submit_concept', 'ddo_submit_concept_nonce' ); ?>
                 <textarea name="ddo_concept_input" rows="5" class="large-text" required></textarea>
                 <?php submit_button( __( 'Verwerk concept', 'data-driven-optimizer' ), 'secondary', 'submit', false ); ?>
-                <button type="button" class="button" id="ddo-preview-concept"><?php esc_html_e( 'Preview via AJAX', 'data-driven-optimizer' ); ?></button>
+                <button type="button" class="button" id="ddo-preview-concept" aria-controls="ddo-ajax-preview-response"><?php esc_html_e( 'Preview via AJAX', 'data-driven-optimizer' ); ?></button>
             </form>
 
             <?php if ( is_array( $concept_result ) ) : ?>
@@ -148,7 +148,7 @@ function ddo_render_admin_page() {
                 <p><strong><?php esc_html_e( 'Samenvatting:', 'data-driven-optimizer' ); ?></strong> <?php echo esc_html( $concept_result['summary'] ); ?></p>
             <?php endif; ?>
 
-            <div id="ddo-ajax-preview-response" aria-live="polite"></div>
+            <div id="ddo-ajax-preview-response" role="status" aria-live="polite" aria-atomic="true"></div>
         </section>
     </div>
     <?php
