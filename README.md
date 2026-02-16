@@ -15,6 +15,47 @@ Versie: 1.1
 - ✅ REST status endpoint (`/ddo/v1/status`).
 - ✅ Nieuwe feedback-flow: REST submit + feedbacksamenvatting endpoint en dashboard-inzichten.
 
+## REST API voorbeelden: feedback
+
+### POST `/wp-json/ddo/v1/feedback`
+
+Request:
+
+```bash
+curl -X POST "https://example.com/wp-json/ddo/v1/feedback" \
+  -H "Content-Type: application/json" \
+  -H "X-WP-Nonce: <nonce>" \
+  -d '{
+    "event": "cta_click",
+    "score": 8,
+    "client_id": "visitor-42",
+    "campaign_id": "campaign-spring-2025",
+    "ad_id": "ad-17"
+  }'
+```
+
+Succes response (`200`):
+
+```json
+{
+  "success": true,
+  "feedback_id": 123
+}
+```
+
+Validatiefout response (`400/422`):
+
+```json
+{
+  "code": "ddo_feedback_score_range_invalid",
+  "message": "Het veld \"score\" moet tussen 0 en 10 liggen.",
+  "data": {
+    "status": 422,
+    "param": "score"
+  }
+}
+```
+
 ## Migratie van API-key opslag (v1.1+)
 - `ddo_api_key_primary` en `ddo_api_key_secondary` worden bij opslaan versleuteld opgeslagen.
 - Bestaande plaintext API-keys worden automatisch gemigreerd:
