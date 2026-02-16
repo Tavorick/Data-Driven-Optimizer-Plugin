@@ -148,6 +148,7 @@ class DDO_Fake_WPDB {
     public $prefix = 'wp_';
     public $insert_id = 0;
     public $feedback_rows = array();
+    public $queries = array();
 
     public function insert( $table, $data ) {
         if ( false !== strpos( $table, 'ddo_feedback' ) ) {
@@ -160,9 +161,16 @@ class DDO_Fake_WPDB {
         return false;
     }
 
+
+    public function query( $sql ) {
+        $this->queries[] = $sql;
+        return 1;
+    }
+
     public function reset_feedback() {
         $this->insert_id     = 0;
         $this->feedback_rows = array();
+        $this->queries       = array();
     }
 }
 
@@ -175,3 +183,5 @@ require_once dirname( __DIR__ ) . '/includes/ml-feedback.php';
 require_once dirname( __DIR__ ) . '/includes/code-introspect.php';
 require_once dirname( __DIR__ ) . '/includes/cron.php';
 require_once dirname( __DIR__ ) . '/includes/admin-dashboard.php';
+
+require_once dirname( __DIR__ ) . '/includes/db-schema.php';

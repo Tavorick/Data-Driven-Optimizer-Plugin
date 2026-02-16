@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'DDO_SCHEMA_VERSION', '1.1.0' );
+define( 'DDO_SCHEMA_VERSION', '1.2.0' );
 
 /**
  * Create or update all plugin tables.
@@ -91,7 +91,8 @@ function ddo_install_database_schema() {
         feedback_text TEXT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'open',
         event_name VARCHAR(100) NOT NULL DEFAULT '',
-        score TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+        score TINYINT(3) UNSIGNED NULL,
+        is_scored TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
         client_hash VARCHAR(255) NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -103,6 +104,7 @@ function ddo_install_database_schema() {
         KEY idx_status (status),
         KEY idx_event_name (event_name),
         KEY idx_score (score),
+        KEY idx_is_scored (is_scored),
         KEY idx_campaign_date (campaign_id, feedback_date),
         KEY idx_ad_date (ad_id, feedback_date)
     ) {$charset_collate};";
@@ -111,6 +113,8 @@ function ddo_install_database_schema() {
     dbDelta( $sql_ga_data );
     dbDelta( $sql_concepts );
     dbDelta( $sql_feedback );
+
+    ddo_migrate_feedback_score_semantics( $table_feedback );
 
     update_option( 'ddo_schema_version', DDO_SCHEMA_VERSION );
 }
@@ -124,4 +128,24 @@ function ddo_maybe_upgrade_database_schema() {
     if ( DDO_SCHEMA_VERSION !== $installed_version ) {
         ddo_install_database_schema();
     }
+}
+
+/**
+ * Migreer score-semantiek zodat ongescoorde feedback onderscheidbaar wordt van score 0.
+ *
+ * @param string $table_feedback Naam van de feedbacktabel.
+ */
+function ddo_migrate_feedback_score_semantics( $table_feedback ) {
+    global $wpdb;
+
+    if ( empty( $table_feedback ) ) {
+        return;
+    }
+
+    // Legacy data gebruikte score=0 als default voor ontbrekende score.
+    $wpdb->query(
+        "UPDATE {$table_feedback}
+        SET is_scored = 0, score = NULL
+        WHERE score = 0 AND ( feedback_text = '' OR feedback_text IS NULL )"
+    );
 }
