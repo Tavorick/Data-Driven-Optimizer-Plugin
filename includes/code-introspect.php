@@ -14,14 +14,7 @@ function ddo_run_daily_introspect_job() {
     ddo_execute_scheduled_job(
         'ddo_daily_introspect',
         function () {
-            $result = ddo_process_code_introspection();
-
-            ddo_update_scheduler_job_metadata(
-                'ddo_daily_introspect',
-                array(
-                    'last_result' => $result,
-                )
-            );
+            return ddo_process_code_introspection();
         }
     );
 }

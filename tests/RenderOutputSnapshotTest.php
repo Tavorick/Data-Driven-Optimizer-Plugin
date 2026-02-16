@@ -130,6 +130,44 @@ class RenderOutputSnapshotTest extends TestCase {
         $this->assertStringContainsString( 'Laatste fout: Timeout bij upstream bron', $output );
     }
 
+
+    public function test_render_scheduler_kpi_and_recent_events_blocks_show_operational_metrics(): void {
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'job-end',
+            'info',
+            array(
+                'duration'     => 4,
+                'result_count' => 10,
+            )
+        );
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'job-error',
+            'error',
+            array(
+                'duration'   => 2,
+                'error_code' => 'API_TIMEOUT',
+            )
+        );
+
+        ob_start();
+        ddo_render_scheduler_kpi_block();
+        $kpiOutput = $this->normalizeHtml( ob_get_clean() );
+
+        $this->assertStringContainsString( 'Run success rate (30d)', $kpiOutput );
+        $this->assertStringContainsString( '50.00%', $kpiOutput );
+        $this->assertStringContainsString( 'Median duration (30d)', $kpiOutput );
+
+        ob_start();
+        ddo_render_recent_scheduler_events_block();
+        $eventsOutput = $this->normalizeHtml( ob_get_clean() );
+
+        $this->assertStringContainsString( '<th>Error code</th>', $eventsOutput );
+        $this->assertStringContainsString( 'API_TIMEOUT', $eventsOutput );
+        $this->assertStringContainsString( '<code>ddo_hourly_fetch</code>', $eventsOutput );
+    }
+
     public function test_format_scheduler_duration_seconds_uses_seconds_label(): void {
         $this->assertSame( '0 sec', ddo_format_scheduler_duration_seconds( 0 ) );
         $this->assertSame( '12 sec', ddo_format_scheduler_duration_seconds( 12 ) );

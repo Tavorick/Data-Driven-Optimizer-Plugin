@@ -443,14 +443,7 @@ function ddo_run_hourly_fetch_job() {
     ddo_execute_scheduled_job(
         'ddo_hourly_fetch',
         function () {
-            $result = ddo_process_api_data_fetch();
-
-            ddo_update_scheduler_job_metadata(
-                'ddo_hourly_fetch',
-                array(
-                    'last_result' => $result,
-                )
-            );
+            return ddo_process_api_data_fetch();
         }
     );
 }

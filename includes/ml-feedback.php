@@ -20,14 +20,7 @@ function ddo_run_weekly_retrain_job() {
     ddo_execute_scheduled_job(
         'ddo_weekly_retrain',
         function () {
-            $result = ddo_process_ml_feedback_retrain();
-
-            ddo_update_scheduler_job_metadata(
-                'ddo_weekly_retrain',
-                array(
-                    'last_result' => $result,
-                )
-            );
+            return ddo_process_ml_feedback_retrain();
         }
     );
 }
@@ -114,14 +107,10 @@ function ddo_run_daily_feedback_cleanup_job() {
         function () {
             $deleted_rows = ddo_cleanup_feedback_data();
 
-            ddo_log_scheduler_event(
-                'ddo_daily_feedback_cleanup',
-                'cleanup-complete',
-                'info',
-                array(
-                    'deleted_rows'   => $deleted_rows,
-                    'retention_days' => ddo_get_feedback_retention_days(),
-                )
+            return array(
+                'result_count'   => $deleted_rows,
+                'deleted_rows'   => $deleted_rows,
+                'retention_days' => ddo_get_feedback_retention_days(),
             );
         }
     );
