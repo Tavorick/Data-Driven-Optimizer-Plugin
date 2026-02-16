@@ -21,6 +21,7 @@ $ddo_test_state = array(
     'cleared_hooks'     => array(),
     'verified_nonces'   => array(),
     'actions_run'       => array(),
+    'transients'        => array(),
 );
 
 class WP_Error {
@@ -103,6 +104,18 @@ function wp_salt( $scheme = '' ) { return 'salt-' . $scheme; }
 function wp_hash( $value ) { return hash( 'sha256', (string) $value ); }
 function wp_json_encode( $value ) { return json_encode( $value ); }
 function rest_ensure_response( $value ) { return $value; }
+
+
+function get_transient( $name ) {
+    global $ddo_test_state;
+    return array_key_exists( $name, $ddo_test_state['transients'] ) ? $ddo_test_state['transients'][ $name ] : false;
+}
+
+function set_transient( $name, $value, $expiration = 0 ) {
+    global $ddo_test_state;
+    $ddo_test_state['transients'][ $name ] = $value;
+    return true;
+}
 
 function get_option( $name, $default = false ) {
     global $ddo_test_state;

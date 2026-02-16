@@ -7,9 +7,10 @@ class RestRoutesTest extends TestCase {
         global $ddo_test_state;
         $ddo_test_state['registered_routes'] = array();
         $ddo_test_state['current_user_can']  = false;
+        $ddo_test_state['transients']        = array();
     }
 
-    public function test_registers_expected_routes_with_permission_callback(): void {
+    public function test_registers_expected_routes_with_permission_callback_per_route(): void {
         global $ddo_test_state;
 
         ddo_register_rest_routes();
@@ -24,11 +25,11 @@ class RestRoutesTest extends TestCase {
         }
 
         $this->assertSame( 'ddo_api_manage_options_permission', $callbacks_by_route['/status'] );
-        $this->assertSame( 'ddo_api_feedback_permission', $callbacks_by_route['/feedback'] );
+        $this->assertSame( 'ddo_api_submit_feedback_permission', $callbacks_by_route['/feedback'] );
         $this->assertSame( 'ddo_api_manage_options_permission', $callbacks_by_route['/feedback/summary'] );
     }
 
-    public function test_permission_callback_checks_manage_options_capability(): void {
+    public function test_manage_options_permission_callback_checks_capability(): void {
         global $ddo_test_state;
 
         $ddo_test_state['current_user_can'] = true;
@@ -36,5 +37,39 @@ class RestRoutesTest extends TestCase {
 
         $ddo_test_state['current_user_can'] = false;
         $this->assertFalse( ddo_api_manage_options_permission() );
+    }
+
+    public function test_submit_feedback_permission_allows_valid_signed_payload_without_manage_options(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['current_user_can'] = false;
+
+        $payload = array(
+            'event'       => 'conversion',
+            'score'       => 9,
+            'client_id'   => 'client-123',
+            'campaign_id' => 'campaign-123',
+            'ad_id'       => 'ad-123',
+        );
+        $nonce = 'feedbacknonce123456';
+        $timestamp = time();
+        $signature = hash_hmac(
+            'sha256',
+            $nonce . '|' . $timestamp . '|' . wp_json_encode( $payload ),
+            ddo_api_get_feedback_signature_secret()
+        );
+
+        $request = new WP_REST_Request(
+            array_merge(
+                $payload,
+                array(
+                    'nonce'     => $nonce,
+                    'timestamp' => $timestamp,
+                    'signature' => $signature,
+                )
+            )
+        );
+
+        $this->assertTrue( ddo_api_submit_feedback_permission( $request ) );
     }
 }
