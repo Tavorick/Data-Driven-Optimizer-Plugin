@@ -12,6 +12,12 @@
     --ddo-type-heading: 600 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --ddo-type-body: 400 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --ddo-type-meta: 500 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+    --ddo-focus-ring: #0b57a3;
+    --ddo-status-ok-bg: #dff3e4;
+    --ddo-status-ok-text: #0f4f18;
+    --ddo-status-stale-bg: #f8dddd;
+    --ddo-status-stale-text: #7a1111;
 }
 
 .ddo-admin-wrap {
@@ -46,7 +52,7 @@
 }
 
 .ddo-section-nav .nav-tab:focus-visible {
-    outline: 2px solid #2271b1;
+    outline: 2px solid var(--ddo-focus-ring);
     outline-offset: 2px;
 }
 
@@ -174,7 +180,7 @@
 }
 
 .ddo-scheduler-row-stale {
-    background: #fff1f0;
+    background: #fde8e8;
 }
 
 .ddo-scheduler-status-pill {
@@ -186,13 +192,13 @@
 }
 
 .ddo-scheduler-status-pill.is-ok {
-    background: #edfaef;
-    color: #207227;
+    background: var(--ddo-status-ok-bg);
+    color: var(--ddo-status-ok-text);
 }
 
 .ddo-scheduler-status-pill.is-stale {
-    background: #fbeaea;
-    color: #9a1f1f;
+    background: var(--ddo-status-stale-bg);
+    color: var(--ddo-status-stale-text);
 }
 
 .ddo-scheduler-run-form {
@@ -210,9 +216,17 @@
 
 .ddo-admin-wrap a:focus-visible,
 .ddo-admin-wrap .button:focus-visible,
+.ddo-admin-wrap input:focus-visible,
+.ddo-admin-wrap textarea:focus-visible,
+.ddo-admin-wrap select:focus-visible,
 .ddo-feedback-table tbody tr:focus-within,
 .ddo-scheduler-table tbody tr:focus-within {
-    outline: 2px solid #2271b1;
+    outline: 2px solid var(--ddo-focus-ring);
+    outline-offset: 2px;
+}
+
+.ddo-admin-wrap button:focus-visible {
+    outline: 2px solid var(--ddo-focus-ring);
     outline-offset: 2px;
 }
 
@@ -258,9 +272,9 @@
 }
 
 #ddo-ajax-preview-response.is-success {
-    background: #edfaef;
-    border-color: #b5e3bc;
-    color: #207227;
+    background: var(--ddo-status-ok-bg);
+    border-color: #82c98f;
+    color: var(--ddo-status-ok-text);
 }
 
 #ddo-ajax-preview-response.is-success::before {
@@ -268,9 +282,28 @@
 }
 
 #ddo-ajax-preview-response.is-error {
-    background: #fbeaea;
-    border-color: #f0b8b8;
-    color: #9a1f1f;
+    background: var(--ddo-status-stale-bg);
+    border-color: #de9191;
+    color: var(--ddo-status-stale-text);
+}
+
+.ddo-admin-wrap .notice.notice-warning {
+    background: #fff4d6;
+    border-left-color: #7a4b00;
+    color: #4a2e00;
+}
+
+.ddo-admin-wrap .notice.notice-error {
+    background: #fde5e5;
+    border-left-color: #8e1717;
+    color: #5f1010;
+}
+
+.ddo-admin-wrap .notice.updated,
+.ddo-admin-wrap .notice.notice-success {
+    background: #e2f5e5;
+    border-left-color: #176d23;
+    color: #0f4f18;
 }
 
 #ddo-ajax-preview-response.is-error::before {
