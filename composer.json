@@ -6,6 +6,7 @@
     "phpunit/phpunit": "^9.6"
   },
   "scripts": {
-    "test": "phpunit"
+    "test": "phpunit",
+    "release-check": "php scripts/release-check.php"
   }
 }
