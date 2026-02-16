@@ -45,3 +45,22 @@ function ddo_api_get_status() {
         )
     );
 }
+
+/**
+ * Handler voor periodieke data-fetches via scheduler.
+ */
+function ddo_run_hourly_fetch_job() {
+    ddo_execute_scheduled_job(
+        'ddo_hourly_fetch',
+        function () {
+            ddo_process_api_data_fetch();
+        }
+    );
+}
+
+/**
+ * Placeholder voor fetch-logica naar externe APIs.
+ */
+function ddo_process_api_data_fetch() {
+    do_action( 'ddo_api_data_fetch' );
+}
