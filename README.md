@@ -56,26 +56,73 @@ Gebruik deze sectie om zichtbare admin-UI wijzigingen traceerbaar vast te leggen
 - ✅ REST status endpoint (`/ddo/v1/status`).
 - ✅ Nieuwe feedback-flow: REST submit + feedbacksamenvatting endpoint en dashboard-inzichten.
 
-## REST API voorbeelden: feedback
+## DDO REST API contracten
 
-### POST `/wp-json/ddo/v1/feedback`
+Alle routes vallen onder namespace `ddo/v1`.
 
-Request:
+### 1) `GET /wp-json/ddo/v1/status`
+
+**Doel**
+Geeft plugin-status, versie en enable-flag terug voor beheerdiagnostiek.
+
+**Permissiemodel**
+- `permission_callback`: `ddo_api_manage_options_permission`.
+- Vereist capability: `manage_options` (typisch administrators).
+- Zonder rechten geeft WordPress REST standaard `rest_forbidden` met status `401` (niet ingelogd) of `403` (wel ingelogd, onvoldoende rechten).
+
+**Request voorbeeld**
+
+```bash
+curl -X GET "https://example.com/wp-json/ddo/v1/status" \
+  -H "X-WP-Nonce: <admin_nonce>"
+```
+
+**Succesresponse (`200`)**
+
+```json
+{
+  "plugin": "data-driven-optimizer",
+  "version": "1.3.0",
+  "enabled": true
+}
+```
+
+**Mogelijke foutcodes**
+- `401/403 rest_forbidden`: caller mist `manage_options`.
+
+---
+
+### 2) `POST /wp-json/ddo/v1/feedback`
+
+**Doel**
+Publieke ingest-route voor event feedback met score, hardening en rate limiting.
+
+**Permissiemodel**
+- `permission_callback`: `ddo_api_submit_feedback_permission`.
+- Geen ingelogde admin vereist, maar request moet cryptografisch geldig zijn.
+- Verplicht: `event`, `score`, `client_id`, `campaign_id`, `ad_id`, `nonce`, `timestamp`, `signature`.
+- Signature: `HMAC-SHA256(nonce|timestamp|json_payload, secret)`.
+- Timestamp-window: maximaal ±5 minuten.
+- Throttling: max 30 requests per 5 minuten per IP+nonce+payload fingerprint.
+
+**Request voorbeeld**
 
 ```bash
 curl -X POST "https://example.com/wp-json/ddo/v1/feedback" \
   -H "Content-Type: application/json" \
-  -H "X-WP-Nonce: <nonce>" \
   -d '{
     "event": "cta_click",
     "score": 8,
     "client_id": "visitor-42",
     "campaign_id": "campaign-spring-2025",
-    "ad_id": "ad-17"
+    "ad_id": "ad-17",
+    "nonce": "AbCdEfGh12345678",
+    "timestamp": 1737026400,
+    "signature": "9f1ed5b74f5e2f8f5d4bc4f0bc5d8b3911d51aef68d2b0bcf4b4f8a2b46f8b0f"
   }'
 ```
 
-Succes response (`200`):
+**Succesresponse (`200`)**
 
 ```json
 {
@@ -84,7 +131,7 @@ Succes response (`200`):
 }
 ```
 
-Validatiefout response (`400/422`):
+**Validatiefoutvoorbeeld (`422`)**
 
 ```json
 {
@@ -97,6 +144,137 @@ Validatiefout response (`400/422`):
 }
 ```
 
+**Mogelijke foutcodes**
+- `400 ddo_feedback_payload_invalid|missing_field|too_small`: payload mist minimumvoorwaarden.
+- `413 ddo_feedback_payload_too_large`: te veel velden of payload > 4096 bytes.
+- `422 ddo_feedback_event_*|score_*|*_length_invalid|*_value_invalid`: veldvalidatie.
+- `403 ddo_feedback_nonce_invalid|timestamp_invalid|signature_invalid|signature_mismatch`: hardening/signature checks gefaald.
+- `429 ddo_feedback_rate_limited`: throttling geactiveerd.
+- `500 ddo_feedback_insert_failed`: opslagfout in database.
+
+---
+
+### 3) `GET /wp-json/ddo/v1/feedback/summary`
+
+**Doel**
+Geeft geaggregeerde feedbackinzichten terug (`totals`, top events, recente items).
+
+**Permissiemodel**
+- `permission_callback`: `ddo_api_manage_options_permission`.
+- Vereist capability: `manage_options`.
+
+**Request voorbeeld**
+
+```bash
+curl -X GET "https://example.com/wp-json/ddo/v1/feedback/summary" \
+  -H "X-WP-Nonce: <admin_nonce>"
+```
+
+**Succesresponse (`200`)**
+
+```json
+{
+  "totals": {
+    "count": 36,
+    "averageScore": 7.4,
+    "highestScore": 10,
+    "lowestScore": 3,
+    "unscored": 5
+  },
+  "events": [
+    {
+      "event_name": "cta_click",
+      "total_items": 21,
+      "average_score": 7.9
+    }
+  ],
+  "recent": [
+    {
+      "id": 321,
+      "event_name": "cta_click",
+      "score": 8,
+      "feedback_date": "2026-02-16",
+      "status": "open",
+      "campaign_id": "campaign-spring-2025",
+      "ad_id": "ad-17"
+    }
+  ],
+  "filters": {
+    "days": 30,
+    "sort": "count_desc"
+  }
+}
+```
+
+**Mogelijke foutcodes**
+- `401/403 rest_forbidden`: caller mist `manage_options`.
+
+## Scoremodel en `unscored`-semantiek
+
+### Definitie
+- `score` is numeriek en alleen geldig binnen **0..10**.
+- `is_scored` is de **leidende waarheid** voor scored/unscored status.
+- Een item telt als **unscored** wanneer `is_scored = 0` (en in migratie-normalisatie ook `score = NULL`).
+
+### Aggregatiegedrag
+- `averageScore`, `highestScore`, `lowestScore` gebruiken alleen records met `is_scored = 1`.
+- `unscored` (API veld) / `unscored_items` (SQL alias) telt records met `is_scored = 0`.
+- Event-gemiddelden gebruiken uitsluitend gescoorde records binnen hetzelfde event.
+
+### Migratie-impact
+Bij schema-installatie/upgrade draait `ddo_migrate_feedback_scoring_model()` om legacy-data te normaliseren:
+1. Legacy regels met impliciete “geen score” (`score = 0` + lege `feedback_text`) worden `is_scored = 0` en `score = NULL`.
+2. Records met bestaande score maar zonder expliciete flag krijgen `is_scored = 1`.
+3. Records zonder score worden altijd `is_scored = 0`.
+4. Records met `is_scored = 0` krijgen altijd `score = NULL` om ambiguïteit uit te sluiten.
+
+**Praktisch gevolg:** integraties die historisch `score = 0` als “niet beoordeeld” interpreteerden, moeten overschakelen op `is_scored`/`unscored` semantiek.
+
+## Compatibiliteitsregels (SemVer voor deze plugin)
+
+### Patch (`x.y.Z`)
+Alleen bugfixes en interne wijzigingen zonder contractbreuk, bijvoorbeeld:
+- Correctie van validatiebericht of loggingtekst.
+- Prestatie-optimalisatie zonder wijziging van routepad, response keys, permissies of scoremodel.
+
+### Minor (`x.Y.z`)
+Backwards-compatible uitbreidingen:
+- Nieuwe optionele responsevelden.
+- Nieuwe route of queryfilter die bestaande clients niet breekt.
+- Nieuwe admin-optie met veilige default.
+
+### Major (`X.y.z`)
+Breaking changes:
+- Verwijderen/renamen van routes, responsevelden of foutcodes.
+- Aanscherpen van permissies waardoor bestaande callers geweigerd worden.
+- Wijziging in scoremodel of semantiek die output van KPI’s functioneel verandert.
+- Datamigratie die oude clients/synchronisaties vereist aan te passen.
+
+## Changelog & breaking changes
+
+Gebruik dit formaat voor elke release:
+
+```md
+### [versie] - YYYY-MM-DD
+- Type: patch|minor|major
+- Breaking: ja|nee
+- Wijzigingen:
+  - ...
+- Migratie-instructies:
+  - ...
+```
+
+### [1.3.0] - 2026-02-16
+- Type: **major**
+- Breaking: **ja**
+- Wijzigingen:
+  - `is_scored` is leidend gemaakt voor scored/unscored interpretatie.
+  - Aggregaties rapporteren expliciet `unscored` op basis van `is_scored = 0`.
+  - Feedback ingest vereist hardeningvelden (`nonce`, `timestamp`, `signature`) voor permissiecheck.
+- Migratie-instructies:
+  - Update clients op `/feedback` zodat hardeningvelden worden meegestuurd.
+  - Behandel `score = NULL` + `is_scored = 0` als “unscored”; gebruik **niet** meer `score = 0` als sentinel.
+  - Valideer dashboards/exports op gewijzigde KPI-betekenis (`averageScore` alleen over gescoorde items).
 
 ## Lokale tests draaien (kritieke paden)
 
