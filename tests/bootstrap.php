@@ -44,8 +44,8 @@ class WP_REST_Request {
     }
 }
 
-function __( $text ) {
-    return $text;
+function __( $text, $domain = null ) {
+    return (string) $text;
 }
 
 function add_action() {}
@@ -63,12 +63,12 @@ function checked( $checked, $current = true, $display = true ) {
     return $result;
 }
 
-function esc_html_e( $text ) {
+function esc_html_e( $text, $domain = null ) {
     echo (string) $text;
 }
-function esc_html__( $text ) { return (string) $text; }
+function esc_html__( $text, $domain = null ) { return (string) $text; }
 function esc_attr( $value ) { return $value; }
-function esc_attr_e( $text ) {
+function esc_attr_e( $text, $domain = null ) {
     echo (string) $text;
 }
 function esc_html( $text ) { return (string) $text; }
