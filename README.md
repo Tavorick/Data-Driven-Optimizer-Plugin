@@ -211,52 +211,38 @@ UI/UX: Responsief dashboard, duidelijke workflow, intuïtieve chatinterface
                  ↘ ML Feedback Loop → Parameter Update
                  ↘ Code Introspectie Module → Recommender
 
-5.2 Componenten
-API Modules: facebook-handler.php, google-handler.php
+5.2 Current architecture (exacte require_once volgorde)
+Onderstaande modules zijn **daadwerkelijk geïmplementeerd** en worden geladen via `data-driven-optimizer.php`:
 
+1. `includes/settings.php`
+2. `includes/admin-dashboard.php`
+3. `includes/api-handlers.php`
+4. `includes/ml-feedback.php`
+5. `includes/code-introspect.php`
+6. `includes/logger.php`
+7. `includes/cron.php`
+8. `includes/db-schema.php`
 
-ETL Pipeline: Cron-driven data-extractie & opslag
+Aanwezige front-end assets in de repository:
 
-
-Database: Custom tables ddo_fb_data, ddo_ga_data, ddo_concepts, ddo_feedback
-
-
-Analyse: content-analysis.php, image-analysis.php
-
-
-ChatGPT Integration: chatgpt-integration.php
-
-
-Admin Dashboard: React/Vue + Chart.js + Chat widget
-
-
-Review Workflow: drafts+meta-key ddo_concept
-
-
-ML Feedback: ml-feedback.php, wekelijkse retraining
-
-
-Code Introspectie: code-introspect.php voor analyse plugindirectory
-
-
-Chat Interface: admin-chat.php + AJAX
+- `assets/css/admin.css`
+- `assets/js/admin.js`
 
 
 
 6. Gedetailleerd Ontwerp
-6.1 Plugin Structuur
+6.1 Plugin Structuur (huidig)
 wp-content/plugins/data-driven-optimizer/
 ├─ data-driven-optimizer.php
 ├─ includes/
 │   ├─ admin-dashboard.php
 │   ├─ api-handlers.php
-│   ├─ chatgpt-integration.php
-│   ├─ content-analysis.php
-│   ├─ image-analysis.php
-│   ├─ settings.php
-│   ├─ ml-feedback.php
 │   ├─ code-introspect.php
-│   └─ admin-chat.php
+│   ├─ cron.php
+│   ├─ db-schema.php
+│   ├─ logger.php
+│   ├─ ml-feedback.php
+│   └─ settings.php
 └─ assets/
     ├─ css/
     └─ js/
@@ -272,17 +258,11 @@ Stuurt bevindingen naar ChatGPT API voor aanbevelingen
 
 
 6.3 Admin Chat Interface
-admin-chat.php + JS: chatwidget in dashboard
-
-
-Stuurt vragen/onderwerpen naar ChatGPT API
-
-
-Toont antwoorden en linkt naar relevante code- of analyse-secties
+Nog niet geïmplementeerd als aparte module. Chatfunctionaliteit staat op de roadmap (zie sectie 7).
 
 
 6.4 Workflow en Cron
-Schedules: ddo_hourly_fetch, ddo_weekly_retrain, ddo_daily_introspect
+Schedules: `ddo_hourly_fetch` (draait elke 15 minuten), `ddo_weekly_retrain`, `ddo_daily_introspect`, `ddo_daily_feedback_cleanup`
 
 
 ETL: halen, transformeren, opslaan data + content extraction
@@ -297,24 +277,31 @@ Components: Grafieken (Chart.js), concepttabellen, code-analyse rapporten, chatp
 
 
 7. Implementatie Roadmap
-Fase
-Beschrijving
-Duur
-Fase 1 (MVP)
-Basisplugin, FB/Google API, ChatGPT contentgeneratie, draft workflow
-2 weken
-Fase 2
-Content & beeldanalyse, ETL-pijplijn, dashboard
-3 weken
-Fase 3
-Feedback logging & ML-optimalisatie
-2 weken
-Fase 4
-Code introspectie module & chatinterface
-2 weken
-Fase 5
-Security audit, GDPR compliance, schaalbaarheid
-1 week
+
+## 7.1 Statuslabels
+- **Done**: aanwezig in codebase.
+- **In Progress**: deels aanwezig, nog niet compleet.
+- **Planned**: nog niet aanwezig in codebase.
+
+## 7.2 Roadmap per module
+- **Done** — `includes/settings.php` (instellingen + beveiligde API-key opslag)
+- **Done** — `includes/admin-dashboard.php` (admin-scherm + AJAX-preview)
+- **Done** — `includes/api-handlers.php` (REST endpoints)
+- **Done** — `includes/ml-feedback.php` (feedbackverwerking + retrain hook)
+- **Done** — `includes/code-introspect.php` (introspectiejob)
+- **Done** — `includes/logger.php` (centrale logging)
+- **Done** — `includes/cron.php` (scheduler + callbacks; 15-minuten interval)
+- **Done** — `includes/db-schema.php` (custom tables + upgrades)
+- **Planned** — `includes/chatgpt-integration.php`
+- **Planned** — `includes/content-analysis.php`
+- **Planned** — `includes/image-analysis.php`
+- **Planned** — `includes/admin-chat.php`
+- **Planned** — `includes/facebook-handler.php`
+- **Planned** — `includes/google-handler.php`
+
+## 7.3 Statuswijzigingen (changelog)
+- **2026-02-16** — Documentatie opgeschoond: module-overzichten afgestemd op daadwerkelijke bestanden in `includes/` en `assets/`; niet-bestaande modules verplaatst naar roadmap met statuslabels.
+- **2026-02-16** — Terminologie geharmoniseerd: “hourly fetch” in documentatie vervangen door “15-minuten fetch” (cron hooknaam `ddo_hourly_fetch` blijft ongewijzigd voor backwards compatibility).
 
 
 8. Technologie Stack
