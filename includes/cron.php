@@ -38,6 +38,10 @@ function ddo_register_cron_events() {
     if ( ! wp_next_scheduled( 'ddo_daily_introspect' ) ) {
         wp_schedule_event( time(), 'daily', 'ddo_daily_introspect' );
     }
+
+    if ( ! wp_next_scheduled( 'ddo_daily_feedback_cleanup' ) ) {
+        wp_schedule_event( time(), 'daily', 'ddo_daily_feedback_cleanup' );
+    }
 }
 
 /**
@@ -47,6 +51,7 @@ function ddo_clear_cron_events() {
     wp_clear_scheduled_hook( 'ddo_hourly_fetch' );
     wp_clear_scheduled_hook( 'ddo_weekly_retrain' );
     wp_clear_scheduled_hook( 'ddo_daily_introspect' );
+    wp_clear_scheduled_hook( 'ddo_daily_feedback_cleanup' );
 }
 
 /**
@@ -56,6 +61,7 @@ function ddo_register_cron_callbacks() {
     add_action( 'ddo_hourly_fetch', 'ddo_run_hourly_fetch_job' );
     add_action( 'ddo_weekly_retrain', 'ddo_run_weekly_retrain_job' );
     add_action( 'ddo_daily_introspect', 'ddo_run_daily_introspect_job' );
+    add_action( 'ddo_daily_feedback_cleanup', 'ddo_run_daily_feedback_cleanup_job' );
 }
 
 

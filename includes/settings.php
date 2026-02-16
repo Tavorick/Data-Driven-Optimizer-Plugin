@@ -53,6 +53,16 @@ function ddo_register_settings_fields() {
         )
     );
 
+    register_setting(
+        'ddo_settings_group',
+        'ddo_feedback_retention_days',
+        array(
+            'type'              => 'integer',
+            'sanitize_callback' => 'ddo_sanitize_feedback_retention_days',
+            'default'           => 180,
+        )
+    );
+
     add_settings_section(
         'ddo_general_settings_section',
         __( 'Algemene instellingen', 'data-driven-optimizer' ),
@@ -83,6 +93,30 @@ function ddo_register_settings_fields() {
         'ddo_settings_group',
         'ddo_general_settings_section'
     );
+
+    add_settings_field(
+        'ddo_feedback_retention_days',
+        __( 'Feedback retentie (dagen)', 'data-driven-optimizer' ),
+        'ddo_render_feedback_retention_days_field',
+        'ddo_settings_group',
+        'ddo_general_settings_section'
+    );
+}
+
+/**
+ * Sanitize feedback retentie in dagen.
+ *
+ * @param mixed $value Ruwe input.
+ * @return int
+ */
+function ddo_sanitize_feedback_retention_days( $value ) {
+    $days = absint( $value );
+
+    if ( $days < 7 ) {
+        return 180;
+    }
+
+    return min( 3650, $days );
 }
 
 /**
@@ -359,5 +393,25 @@ function ddo_render_api_key_secondary_field() {
         placeholder="<?php echo esc_attr( $has_api_key ? __( '•••••••• (ongewijzigd)', 'data-driven-optimizer' ) : __( 'Voer secondary API-key in', 'data-driven-optimizer' ) ); ?>"
     />
     <p class="description"><?php esc_html_e( 'Wordt gebruikt voor fallback of analytics-provider. Laat leeg om ongewijzigd te laten.', 'data-driven-optimizer' ); ?></p>
+    <?php
+}
+
+/**
+ * Render feedback retentieveld.
+ */
+function ddo_render_feedback_retention_days_field() {
+    $retention_days = (int) get_option( 'ddo_feedback_retention_days', 180 );
+    ?>
+    <input
+        type="number"
+        id="ddo_feedback_retention_days"
+        name="ddo_feedback_retention_days"
+        value="<?php echo esc_attr( $retention_days ); ?>"
+        min="7"
+        max="3650"
+        step="1"
+        class="small-text"
+    />
+    <p class="description"><?php esc_html_e( 'Aantal dagen dat feedbackrecords worden bewaard voordat dagelijkse cleanup oude data verwijdert. Kies een waarde tussen 7 en 3650 dagen.', 'data-driven-optimizer' ); ?></p>
     <?php
 }
