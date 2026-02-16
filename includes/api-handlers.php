@@ -34,7 +34,7 @@ function ddo_register_rest_routes() {
         array(
             'methods'             => 'POST',
             'callback'            => 'ddo_api_submit_feedback',
-            'permission_callback' => 'ddo_api_feedback_permission',
+            'permission_callback' => 'ddo_api_submit_feedback_permission',
             'args'                => array(
                 'event'       => array(
                     'required'          => true,
@@ -287,7 +287,7 @@ function ddo_api_manage_options_permission() {
  * @param WP_REST_Request $request REST request object.
  * @return true|WP_Error
  */
-function ddo_api_feedback_permission( WP_REST_Request $request ) {
+function ddo_api_submit_feedback_permission( WP_REST_Request $request ) {
     $params = $request->get_params();
 
     $hardening_result = ddo_api_validate_feedback_payload_minimum( $params );
@@ -334,6 +334,16 @@ function ddo_api_feedback_permission( WP_REST_Request $request ) {
     }
 
     return true;
+}
+
+/**
+ * Backwards-compatible alias voor legacy permissie callback naam.
+ *
+ * @param WP_REST_Request $request REST request object.
+ * @return true|WP_Error
+ */
+function ddo_api_feedback_permission( WP_REST_Request $request ) {
+    return ddo_api_submit_feedback_permission( $request );
 }
 
 /**
@@ -396,12 +406,13 @@ function ddo_api_check_feedback_rate_limit( $nonce, $signed_payload ) {
     $ip_address = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( (string) $_SERVER['REMOTE_ADDR'] ) : 'unknown';
     $fingerprint_source = $ip_address . '|' . $nonce . '|' . wp_json_encode( $signed_payload );
     $fingerprint        = wp_hash( $fingerprint_source );
+    $transient_key      = 'ddo_rl_' . substr( md5( $fingerprint ), 0, 24 );
 
     $window_seconds = 5 * MINUTE_IN_SECONDS;
     $max_attempts   = 30;
     $now            = time();
-    $state          = get_option( 'ddo_feedback_rate_limit_state', array() );
-    $bucket         = isset( $state[ $fingerprint ] ) ? $state[ $fingerprint ] : array(
+    $bucket         = get_transient( $transient_key );
+    $bucket         = is_array( $bucket ) ? $bucket : array(
         'count'    => 0,
         'window'   => $window_seconds,
         'expires'  => $now + $window_seconds,
@@ -415,14 +426,12 @@ function ddo_api_check_feedback_rate_limit( $nonce, $signed_payload ) {
     $bucket['count'] = isset( $bucket['count'] ) ? (int) $bucket['count'] + 1 : 1;
 
     if ( $bucket['count'] > $max_attempts ) {
-        $state[ $fingerprint ] = $bucket;
-        update_option( 'ddo_feedback_rate_limit_state', $state );
+        set_transient( $transient_key, $bucket, max( 1, (int) ( $bucket['expires'] - $now ) ) );
 
         return new WP_Error( 'ddo_feedback_rate_limited', __( 'Te veel feedback requests. Probeer later opnieuw.', 'data-driven-optimizer' ), array( 'status' => 429 ) );
     }
 
-    $state[ $fingerprint ] = $bucket;
-    update_option( 'ddo_feedback_rate_limit_state', $state );
+    set_transient( $transient_key, $bucket, max( 1, (int) ( $bucket['expires'] - $now ) ) );
 
     return true;
 }
