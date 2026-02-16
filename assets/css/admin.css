@@ -152,6 +152,34 @@
     background: var(--ddo-card-background);
 }
 
+
+.ddo-scheduler-bulk-form {
+    margin: 0 0 var(--ddo-space-12);
+}
+
+.ddo-scheduler-group {
+    margin: 0 0 var(--ddo-space-16);
+    padding: var(--ddo-space-12);
+    border-radius: var(--ddo-card-radius);
+    border: 1px solid transparent;
+}
+
+.ddo-scheduler-group h4 {
+    margin: 0 0 var(--ddo-space-8);
+    font: var(--ddo-type-meta);
+    text-transform: uppercase;
+}
+
+.ddo-scheduler-group-stale {
+    background: #fff5f5;
+    border-color: #f3cccc;
+}
+
+.ddo-scheduler-group-healthy {
+    background: #f4fbf5;
+    border-color: #cfe7d2;
+}
+
 .ddo-scheduler-table {
     margin: 0 0 var(--ddo-space-24);
     border: var(--ddo-card-border);
