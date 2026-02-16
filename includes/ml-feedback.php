@@ -20,16 +20,85 @@ function ddo_run_weekly_retrain_job() {
     ddo_execute_scheduled_job(
         'ddo_weekly_retrain',
         function () {
-            ddo_process_ml_feedback_retrain();
+            $result = ddo_process_ml_feedback_retrain();
+
+            ddo_update_scheduler_job_metadata(
+                'ddo_weekly_retrain',
+                array(
+                    'last_result' => $result,
+                )
+            );
         }
     );
 }
 
 /**
- * Placeholder voor retrain-logica.
+ * Configureer een custom model retrain service.
+ *
+ * @param callable|null $service Service-callback.
+ */
+function ddo_set_ml_feedback_retrain_service( $service ) {
+    $GLOBALS['ddo_ml_feedback_retrain_service'] = $service;
+}
+
+/**
+ * Haal de actieve retrain service op.
+ *
+ * @return callable
+ */
+function ddo_get_ml_feedback_retrain_service() {
+    $service = isset( $GLOBALS['ddo_ml_feedback_retrain_service'] ) ? $GLOBALS['ddo_ml_feedback_retrain_service'] : 'ddo_default_ml_feedback_retrain_service';
+
+    if ( ! is_callable( $service ) ) {
+        return 'ddo_default_ml_feedback_retrain_service';
+    }
+
+    return $service;
+}
+
+/**
+ * Default retrain service voor feedbackmodellen.
+ *
+ * @return array
+ */
+function ddo_default_ml_feedback_retrain_service() {
+    return array(
+        'trained_samples' => 0,
+        'model_version'   => 'baseline',
+    );
+}
+
+/**
+ * Verwerk retrain-logica voor feedbackmodellen.
+ *
+ * @return array
  */
 function ddo_process_ml_feedback_retrain() {
-    do_action( 'ddo_ml_feedback_retrain' );
+    $started_at = microtime( true );
+    $service    = ddo_get_ml_feedback_retrain_service();
+    $payload    = call_user_func( $service );
+    $payload    = is_array( $payload ) ? $payload : array();
+
+    $records_processed = isset( $payload['trained_samples'] ) ? (int) $payload['trained_samples'] : 0;
+    $error_code        = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+
+    $result = array(
+        'job'               => 'ddo_weekly_retrain',
+        'service'           => is_string( $service ) ? $service : 'custom-ml-feedback-retrain-service',
+        'records_processed' => max( 0, $records_processed ),
+        'duration_ms'       => (int) round( ( microtime( true ) - $started_at ) * 1000 ),
+        'error_code'        => $error_code,
+    );
+
+    if ( '' !== $error_code ) {
+        ddo_log_scheduler_event( 'ddo_weekly_retrain', 'retrain-failed', 'error', $result );
+
+        throw new RuntimeException( 'ML feedback retrain failed.', 0 );
+    }
+
+    ddo_log_scheduler_event( 'ddo_weekly_retrain', 'retrain-complete', 'info', $result );
+
+    return $result;
 }
 
 
