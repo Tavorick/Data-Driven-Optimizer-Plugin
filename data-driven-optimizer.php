@@ -47,6 +47,8 @@ function ddo_activate_plugin() {
         add_option( 'ddo_api_key_secondary', '' );
     }
 
+    ddo_maybe_migrate_api_keys_to_encrypted();
+
     $legacy_options = get_option( 'ddo_options', array() );
 
     if ( is_array( $legacy_options ) && array_key_exists( 'enabled', $legacy_options ) ) {
@@ -69,6 +71,7 @@ register_deactivation_hook( DDO_PLUGIN_FILE, 'ddo_deactivate_plugin' );
  */
 function ddo_init_plugin() {
     ddo_maybe_upgrade_database_schema();
+    ddo_maybe_migrate_api_keys_to_encrypted();
     ddo_register_settings();
     ddo_register_admin_menu();
     ddo_register_api_routes();
