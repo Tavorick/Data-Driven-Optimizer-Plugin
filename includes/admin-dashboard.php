@@ -78,8 +78,9 @@ function ddo_render_admin_page() {
         return;
     }
 
-    $enabled        = (bool) get_option( 'ddo_enabled', true );
-    $concept_result = get_transient( 'ddo_concept_result_' . get_current_user_id() );
+    $enabled          = (bool) get_option( 'ddo_enabled', true );
+    $concept_result   = get_transient( 'ddo_concept_result_' . get_current_user_id() );
+    $feedback_summary = ddo_get_feedback_summary();
 
     if ( false !== $concept_result ) {
         delete_transient( 'ddo_concept_result_' . get_current_user_id() );
@@ -87,7 +88,7 @@ function ddo_render_admin_page() {
     ?>
     <div class="wrap ddo-admin-wrap">
         <h1><?php esc_html_e( 'Data Driven Optimizer', 'data-driven-optimizer' ); ?></h1>
-        <p><?php esc_html_e( 'Beheer hier API-keys en conceptvalidatie.', 'data-driven-optimizer' ); ?></p>
+        <p><?php esc_html_e( 'Beheer hier API-keys, conceptvalidatie en feedbackinzichten.', 'data-driven-optimizer' ); ?></p>
         <p>
             <strong><?php esc_html_e( 'Status:', 'data-driven-optimizer' ); ?></strong>
             <?php echo $enabled ? esc_html__( 'Ingeschakeld', 'data-driven-optimizer' ) : esc_html__( 'Uitgeschakeld', 'data-driven-optimizer' ); ?>
@@ -102,6 +103,12 @@ function ddo_render_admin_page() {
             submit_button( __( 'Instellingen opslaan', 'data-driven-optimizer' ) );
             ?>
         </form>
+
+        <hr />
+
+        <h2><?php esc_html_e( 'Feedback inzichten', 'data-driven-optimizer' ); ?></h2>
+        <?php ddo_render_feedback_summary_cards( $feedback_summary ); ?>
+        <?php ddo_render_feedback_events_table( $feedback_summary ); ?>
 
         <hr />
 
@@ -122,6 +129,62 @@ function ddo_render_admin_page() {
 
         <div id="ddo-ajax-preview-response" aria-live="polite"></div>
     </div>
+    <?php
+}
+
+/**
+ * Render compacte samenvattingskaarten.
+ *
+ * @param array $summary Feedbacksamenvatting.
+ */
+function ddo_render_feedback_summary_cards( $summary ) {
+    $total_count   = isset( $summary['totals']['count'] ) ? (int) $summary['totals']['count'] : 0;
+    $average_score = isset( $summary['totals']['averageScore'] ) ? (float) $summary['totals']['averageScore'] : 0;
+    ?>
+    <div class="ddo-feedback-cards">
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Totaal feedback-items', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( $total_count ) ); ?></p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Gemiddelde score', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( $average_score, 2 ) ); ?></p>
+        </div>
+    </div>
+    <?php
+}
+
+/**
+ * Render tabel met eventaggregatie.
+ *
+ * @param array $summary Feedbacksamenvatting.
+ */
+function ddo_render_feedback_events_table( $summary ) {
+    $events = isset( $summary['events'] ) && is_array( $summary['events'] ) ? $summary['events'] : array();
+
+    if ( empty( $events ) ) {
+        echo '<p>' . esc_html__( 'Nog geen feedbackevents opgeslagen.', 'data-driven-optimizer' ) . '</p>';
+        return;
+    }
+    ?>
+    <table class="widefat striped ddo-feedback-table">
+        <thead>
+            <tr>
+                <th><?php esc_html_e( 'Event', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Aantal', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Gem. score', 'data-driven-optimizer' ); ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ( $events as $event_row ) : ?>
+                <tr>
+                    <td><?php echo esc_html( $event_row['event_name'] ); ?></td>
+                    <td><?php echo esc_html( number_format_i18n( (int) $event_row['total_items'] ) ); ?></td>
+                    <td><?php echo esc_html( number_format_i18n( (float) $event_row['average_score'], 2 ) ); ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
     <?php
 }
 

@@ -4,6 +4,16 @@ Versie: 1.1
  Auteur: ChatGPT (framework)
 
 1. Executive Summary
+
+## Huidige implementatiestatus (codebase)
+- ✅ Basis plugin-bootstrap, activatie/deactivatie en module-loading.
+- ✅ Settings API met losse opties (`ddo_enabled`, primaire/secundaire API-key).
+- ✅ Admin dashboard met conceptinvoer + AJAX-preview.
+- ✅ WP-Cron orchestration voor 15-min fetch, weekly retrain en daily introspect.
+- ✅ Database schema met tabellen voor FB/GA-data, concepten en feedback.
+- ✅ REST status endpoint (`/ddo/v1/status`).
+- ✅ Nieuwe feedback-flow: REST submit + feedbacksamenvatting endpoint en dashboard-inzichten.
+
 Dit document biedt een gedetailleerd overzicht en stappenplan voor de ontwikkeling van de Data-Driven Optimizer (DDO) WordPress-plugin. De plugin:
 Verzamelt en analyseert data uit Facebook (inclusief Pixel), Google Ads & Analytics en je WordPress-omgeving.
 
