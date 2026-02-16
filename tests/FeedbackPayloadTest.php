@@ -308,9 +308,9 @@ class FeedbackPayloadTest extends TestCase {
         $this->assertSame(
             array(
                 'count'        => 0,
-                'averageScore' => 0.0,
-                'highestScore' => 0.0,
-                'lowestScore'  => 0.0,
+                'averageScore' => 0,
+                'highestScore' => 0,
+                'lowestScore'  => 0,
                 'unscored'     => 0,
             ),
             $summary['totals']
