@@ -168,7 +168,7 @@ function ddo_render_admin_page() {
  * @return array
  */
 function ddo_get_feedback_filters_from_request() {
-    $days = isset( $_GET['ddo_days'] ) ? (int) wp_unslash( $_GET['ddo_days'] ) : 30; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+    $days = isset( $_GET['ddo_days'] ) ? absint( wp_unslash( $_GET['ddo_days'] ) ) : 30; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
     $sort = isset( $_GET['ddo_sort'] ) ? sanitize_key( wp_unslash( $_GET['ddo_sort'] ) ) : 'count_desc'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
     return ddo_normalize_feedback_filters(
@@ -758,7 +758,7 @@ function ddo_process_run_scheduler_job_request( $request ) {
         );
     }
 
-    $job_name = isset( $request['job_name'] ) ? sanitize_text_field( wp_unslash( $request['job_name'] ) ) : '';
+    $job_name = isset( $request['job_name'] ) ? sanitize_key( wp_unslash( $request['job_name'] ) ) : '';
     $jobs     = ddo_get_scheduler_observability_jobs();
 
     if ( '__all_safe__' === $job_name ) {
@@ -813,7 +813,7 @@ function ddo_process_run_scheduler_job_request( $request ) {
  * Verwerk handmatige scheduler-run vanuit admin.
  */
 function ddo_handle_run_scheduler_job() {
-    $result       = ddo_process_run_scheduler_job_request( $_POST );
+    $result       = ddo_process_run_scheduler_job_request( wp_unslash( $_POST ) );
     $notice       = isset( $result['notice'] ) ? $result['notice'] : 'invalid';
     $redirect_url = admin_url( 'admin.php?page=ddo-dashboard&ddo_scheduler_notice=' . rawurlencode( $notice ) );
 

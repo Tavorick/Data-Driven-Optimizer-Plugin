@@ -210,14 +210,23 @@ function ddo_api_sanitize_feedback_identifier( $value ) {
  * @return true|WP_Error
  */
 function ddo_api_validate_feedback_identifier_field( $value, $param, $max_length = 100, $allow_general = false ) {
+    $raw_identifier = trim( (string) $value );
     $identifier = ddo_api_sanitize_feedback_identifier( $value );
 
-    if ( '' === $identifier ) {
+    if ( '' === $raw_identifier || '' === $identifier ) {
         return new WP_Error( 'ddo_feedback_' . $param . '_missing', sprintf( __( 'Het veld "%s" is verplicht.', 'data-driven-optimizer' ), $param ), array( 'status' => 400, 'param' => $param ) );
+    }
+
+    if ( $raw_identifier !== $identifier ) {
+        return new WP_Error( 'ddo_feedback_' . $param . '_format_invalid', sprintf( __( 'Het veld "%s" bevat ongeldige tekens.', 'data-driven-optimizer' ), $param ), array( 'status' => 422, 'param' => $param ) );
     }
 
     if ( strlen( $identifier ) > $max_length ) {
         return new WP_Error( 'ddo_feedback_' . $param . '_length_invalid', sprintf( __( 'Het veld "%s" mag maximaal %d tekens bevatten.', 'data-driven-optimizer' ), $param, $max_length ), array( 'status' => 422, 'param' => $param ) );
+    }
+
+    if ( 1 !== preg_match( '/^[A-Za-z0-9._:-]+$/', $identifier ) ) {
+        return new WP_Error( 'ddo_feedback_' . $param . '_format_invalid', sprintf( __( 'Het veld "%s" bevat ongeldige tekens.', 'data-driven-optimizer' ), $param ), array( 'status' => 422, 'param' => $param ) );
     }
 
     if ( ! $allow_general && 'general' === strtolower( $identifier ) ) {
@@ -295,17 +304,17 @@ function ddo_api_submit_feedback_permission( WP_REST_Request $request ) {
         return $hardening_result;
     }
 
-    $nonce = isset( $params['nonce'] ) ? sanitize_text_field( (string) $params['nonce'] ) : '';
+    $nonce = isset( $params['nonce'] ) ? ddo_api_sanitize_feedback_nonce( $params['nonce'] ) : '';
     if ( '' === $nonce || 1 !== preg_match( '/^[A-Za-z0-9_-]{16,128}$/', $nonce ) ) {
         return new WP_Error( 'ddo_feedback_nonce_invalid', __( 'Ongeldige feedback nonce.', 'data-driven-optimizer' ), array( 'status' => 403 ) );
     }
 
-    $timestamp = isset( $params['timestamp'] ) ? (int) $params['timestamp'] : 0;
+    $timestamp = isset( $params['timestamp'] ) ? ddo_api_sanitize_feedback_timestamp( $params['timestamp'] ) : 0;
     if ( $timestamp <= 0 || abs( time() - $timestamp ) > 5 * MINUTE_IN_SECONDS ) {
         return new WP_Error( 'ddo_feedback_timestamp_invalid', __( 'Feedback request is verlopen.', 'data-driven-optimizer' ), array( 'status' => 403 ) );
     }
 
-    $signature = isset( $params['signature'] ) ? sanitize_text_field( (string) $params['signature'] ) : '';
+    $signature = isset( $params['signature'] ) ? ddo_api_sanitize_feedback_signature( $params['signature'] ) : '';
     if ( '' === $signature || 1 !== preg_match( '/^[a-f0-9]{64}$/', strtolower( $signature ) ) ) {
         return new WP_Error( 'ddo_feedback_signature_invalid', __( 'Ongeldige feedback signature.', 'data-driven-optimizer' ), array( 'status' => 403 ) );
     }
@@ -396,6 +405,51 @@ function ddo_api_validate_feedback_payload_minimum( $params ) {
 }
 
 /**
+ * Sanitiseer nonce waarde voor feedback ingest.
+ *
+ * @param mixed $value Ruwe nonce.
+ * @return string
+ */
+function ddo_api_sanitize_feedback_nonce( $value ) {
+    return sanitize_text_field( (string) $value );
+}
+
+/**
+ * Sanitiseer request timestamp voor feedback ingest.
+ *
+ * @param mixed $value Ruwe timestamp.
+ * @return int
+ */
+function ddo_api_sanitize_feedback_timestamp( $value ) {
+    return (int) $value;
+}
+
+/**
+ * Sanitiseer request signature voor feedback ingest.
+ *
+ * @param mixed $value Ruwe signature.
+ * @return string
+ */
+function ddo_api_sanitize_feedback_signature( $value ) {
+    return strtolower( sanitize_text_field( (string) $value ) );
+}
+
+/**
+ * Sanitiseer bron-IP voor feedback throttling.
+ *
+ * @return string
+ */
+function ddo_api_get_feedback_request_ip() {
+    $raw_ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( (string) $_SERVER['REMOTE_ADDR'] ) : '';
+
+    if ( '' !== $raw_ip && false !== filter_var( $raw_ip, FILTER_VALIDATE_IP ) ) {
+        return $raw_ip;
+    }
+
+    return 'unknown';
+}
+
+/**
  * Controleer feedback ingest op throttling per IP + payload hash.
  *
  * @param string $nonce          Request nonce.
@@ -403,35 +457,55 @@ function ddo_api_validate_feedback_payload_minimum( $params ) {
  * @return true|WP_Error
  */
 function ddo_api_check_feedback_rate_limit( $nonce, $signed_payload ) {
-    $ip_address = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( (string) $_SERVER['REMOTE_ADDR'] ) : 'unknown';
-    $fingerprint_source = $ip_address . '|' . $nonce . '|' . wp_json_encode( $signed_payload );
-    $fingerprint        = wp_hash( $fingerprint_source );
-    $transient_key      = 'ddo_rl_' . substr( md5( $fingerprint ), 0, 24 );
+    $ip_address         = ddo_api_get_feedback_request_ip();
+    $window_seconds     = 5 * MINUTE_IN_SECONDS;
+    $max_attempts_per_ip = 60;
+    $max_attempts_per_payload = 30;
 
-    $window_seconds = 5 * MINUTE_IN_SECONDS;
-    $max_attempts   = 30;
-    $now            = time();
-    $bucket         = get_transient( $transient_key );
-    $bucket         = is_array( $bucket ) ? $bucket : array(
-        'count'    => 0,
-        'window'   => $window_seconds,
-        'expires'  => $now + $window_seconds,
+    $ip_bucket_key = 'ddo_rl_ip_' . substr( md5( wp_hash( $ip_address ) ), 0, 24 );
+    $ip_result     = ddo_api_increment_rate_limit_bucket( $ip_bucket_key, $window_seconds, $max_attempts_per_ip );
+    if ( is_wp_error( $ip_result ) ) {
+        return $ip_result;
+    }
+
+    $payload_fingerprint = wp_hash( $ip_address . '|' . wp_json_encode( $signed_payload ) );
+    $payload_bucket_key  = 'ddo_rl_payload_' . substr( md5( $payload_fingerprint ), 0, 24 );
+    $payload_result      = ddo_api_increment_rate_limit_bucket( $payload_bucket_key, $window_seconds, $max_attempts_per_payload );
+    if ( is_wp_error( $payload_result ) ) {
+        return $payload_result;
+    }
+
+    return true;
+}
+
+/**
+ * Verhoog rate-limit bucket en geef fout terug bij overschrijding.
+ *
+ * @param string $transient_key Bucket key.
+ * @param int    $window_seconds Rolling window in seconden.
+ * @param int    $max_attempts Maximaal toegestane requests in het venster.
+ * @return true|WP_Error
+ */
+function ddo_api_increment_rate_limit_bucket( $transient_key, $window_seconds, $max_attempts ) {
+    $now    = time();
+    $bucket = get_transient( $transient_key );
+    $bucket = is_array( $bucket ) ? $bucket : array(
+        'count'   => 0,
+        'window'  => (int) $window_seconds,
+        'expires' => $now + (int) $window_seconds,
     );
 
     if ( ! isset( $bucket['expires'] ) || (int) $bucket['expires'] <= $now ) {
         $bucket['count']   = 0;
-        $bucket['expires'] = $now + $window_seconds;
+        $bucket['expires'] = $now + (int) $window_seconds;
     }
 
     $bucket['count'] = isset( $bucket['count'] ) ? (int) $bucket['count'] + 1 : 1;
+    set_transient( $transient_key, $bucket, max( 1, (int) ( $bucket['expires'] - $now ) ) );
 
-    if ( $bucket['count'] > $max_attempts ) {
-        set_transient( $transient_key, $bucket, max( 1, (int) ( $bucket['expires'] - $now ) ) );
-
+    if ( $bucket['count'] > (int) $max_attempts ) {
         return new WP_Error( 'ddo_feedback_rate_limited', __( 'Te veel feedback requests. Probeer later opnieuw.', 'data-driven-optimizer' ), array( 'status' => 429 ) );
     }
-
-    set_transient( $transient_key, $bucket, max( 1, (int) ( $bucket['expires'] - $now ) ) );
 
     return true;
 }

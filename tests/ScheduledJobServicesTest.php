@@ -155,6 +155,31 @@ class ScheduledJobServicesTest extends TestCase {
         $this->assertSame( '', $events[0]['context']['error_code'] );
     }
 
+
+
+    public function test_scheduler_log_event_redacts_sensitive_context_and_message(): void {
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'upstream failed with api_key=sk-live-123 and signature=abc',
+            'error',
+            array(
+                'api_key_primary' => 'sk-live-123',
+                'clientHash'      => 'f7d95f2f4f2f4dbe6d6508e6ccf84387bb5ef1dc9f21f80d697f4f6a33277603',
+                'meta'            => array(
+                    'token' => 'secret-token',
+                ),
+            )
+        );
+
+        $events = ddo_get_recent_scheduler_events( 1 );
+
+        $this->assertCount( 1, $events );
+        $this->assertStringNotContainsString( 'sk-live-123', $events[0]['message'] );
+        $this->assertSame( '[redacted]', $events[0]['context']['api_key_primary'] );
+        $this->assertSame( '[redacted]', $events[0]['context']['clientHash'] );
+        $this->assertSame( '[redacted]', $events[0]['context']['meta']['token'] );
+    }
+
     public function test_placeholder_actions_are_not_present_anymore(): void {
         $api_handlers = file_get_contents( dirname( __DIR__ ) . '/includes/api-handlers.php' );
         $ml_feedback  = file_get_contents( dirname( __DIR__ ) . '/includes/ml-feedback.php' );
