@@ -92,6 +92,47 @@ class CronEventsTest extends TestCase {
         );
     }
 
+    public function test_execute_scheduled_job_updates_success_metadata_with_duration(): void {
+        global $ddo_test_state;
+
+        ddo_execute_scheduled_job(
+            'ddo_hourly_fetch',
+            function () {
+                // no-op
+            }
+        );
+
+        $metadata = $ddo_test_state['options']['ddo_scheduler_job_metadata']['ddo_hourly_fetch'] ?? array();
+
+        $this->assertArrayHasKey( 'last_start', $metadata );
+        $this->assertArrayHasKey( 'last_success', $metadata );
+        $this->assertArrayHasKey( 'last_run_duration', $metadata );
+        $this->assertSame( '', $metadata['last_error_message'] );
+        $this->assertIsInt( $metadata['last_run_duration'] );
+        $this->assertGreaterThanOrEqual( 0, $metadata['last_run_duration'] );
+    }
+
+    public function test_execute_scheduled_job_updates_error_metadata_with_duration(): void {
+        global $ddo_test_state;
+
+        ddo_execute_scheduled_job(
+            'ddo_hourly_fetch',
+            function () {
+                throw new Exception( 'kapot' );
+            }
+        );
+
+        $metadata = $ddo_test_state['options']['ddo_scheduler_job_metadata']['ddo_hourly_fetch'] ?? array();
+
+        $this->assertArrayHasKey( 'last_start', $metadata );
+        $this->assertArrayHasKey( 'last_error_at', $metadata );
+        $this->assertArrayHasKey( 'last_run_duration', $metadata );
+        $this->assertSame( 'kapot', $metadata['last_error_message'] );
+        $this->assertIsInt( $metadata['last_run_duration'] );
+        $this->assertGreaterThanOrEqual( 0, $metadata['last_run_duration'] );
+    }
+
+
     public function test_run_scheduler_job_request_rejects_bulk_when_nonce_invalid(): void {
         $result = ddo_process_run_scheduler_job_request(
             array(
