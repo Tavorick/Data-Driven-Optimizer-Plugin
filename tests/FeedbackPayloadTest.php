@@ -26,9 +26,24 @@ class FeedbackPayloadTest extends TestCase {
 
         $this->assertSame( 'cta_click', $payload['event'] );
         $this->assertSame( 10, $payload['score'] );
+        $this->assertTrue( $payload['isScored'] );
         $this->assertNotSame( 'client-123', $payload['clientHash'] );
         $this->assertSame( 'general', $payload['campaignId'] );
         $this->assertSame( 'general', $payload['adId'] );
+    }
+
+    public function test_prepare_feedback_payload_marks_missing_score_as_unscored(): void {
+        $payload = ddo_prepare_feedback_payload(
+            array(
+                'event'       => 'cta_click',
+                'client_id'   => 'client-abc',
+                'campaign_id' => 'cmp-1',
+                'ad_id'       => 'ad-1',
+            )
+        );
+
+        $this->assertNull( $payload['score'] );
+        $this->assertFalse( $payload['isScored'] );
     }
 
     public function test_ddo_feedback_test_data_isolation_is_explicit(): void {
@@ -50,6 +65,31 @@ class FeedbackPayloadTest extends TestCase {
         $this->assertCount( 0, $wpdb->feedback_rows );
     }
 
+    public function test_store_feedback_payload_persists_unscored_flag(): void {
+        global $wpdb;
+
+        ddo_store_feedback_payload(
+            array(
+                'event'       => 'view',
+                'campaign_id' => 'c1',
+                'ad_id'       => 'a1',
+            )
+        );
+
+        $this->assertSame( 0, $wpdb->feedback_rows[0]['is_scored'] );
+        $this->assertNull( $wpdb->feedback_rows[0]['score'] );
+    }
+
+    public function test_feedback_score_semantics_migration_updates_legacy_zero_rows(): void {
+        global $wpdb;
+
+        ddo_migrate_feedback_score_semantics( $wpdb->prefix . 'ddo_feedback' );
+
+        $this->assertNotEmpty( $wpdb->queries );
+        $this->assertStringContainsString( 'SET is_scored = 0, score = NULL', $wpdb->queries[0] );
+        $this->assertStringContainsString( 'WHERE score = 0', $wpdb->queries[0] );
+    }
+
     public function test_normalize_feedback_filters_rejects_invalid_values(): void {
         $filters = ddo_normalize_feedback_filters(
             array(
@@ -68,6 +108,7 @@ class FeedbackPayloadTest extends TestCase {
                 'id'            => 1,
                 'event_name'    => 'purchase',
                 'score'         => 4,
+                'is_scored'     => 1,
                 'feedback_date' => gmdate( 'Y-m-d', time() - 2 * DAY_IN_SECONDS ),
                 'status'        => 'open',
                 'campaign_id'   => 'c1',
@@ -76,7 +117,8 @@ class FeedbackPayloadTest extends TestCase {
             array(
                 'id'            => 2,
                 'event_name'    => 'purchase',
-                'score'         => '',
+                'score'         => 0,
+                'is_scored'     => 0,
                 'feedback_date' => gmdate( 'Y-m-d', time() - 3 * DAY_IN_SECONDS ),
                 'status'        => 'open',
                 'campaign_id'   => 'c2',
@@ -86,6 +128,7 @@ class FeedbackPayloadTest extends TestCase {
                 'id'            => 3,
                 'event_name'    => 'click',
                 'score'         => 9,
+                'is_scored'     => 1,
                 'feedback_date' => gmdate( 'Y-m-d', time() - 40 * DAY_IN_SECONDS ),
                 'status'        => 'open',
                 'campaign_id'   => 'c3',
@@ -108,5 +151,30 @@ class FeedbackPayloadTest extends TestCase {
         $this->assertSame( 1, $summary['totals']['unscored'] );
         $this->assertCount( 1, $summary['events'] );
         $this->assertSame( 'purchase', $summary['events'][0]['event_name'] );
+    }
+
+    public function test_calculate_feedback_totals_distinguishes_zero_score_from_unscored(): void {
+        $rows = array(
+            array(
+                'id'            => 1,
+                'score'         => 0,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+            ),
+            array(
+                'id'            => 2,
+                'score'         => 0,
+                'is_scored'     => 0,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+            ),
+        );
+
+        $totals = ddo_calculate_feedback_totals( $rows );
+
+        $this->assertSame( 2, $totals['count'] );
+        $this->assertSame( 0.0, $totals['averageScore'] );
+        $this->assertSame( 0.0, $totals['highestScore'] );
+        $this->assertSame( 0.0, $totals['lowestScore'] );
+        $this->assertSame( 1, $totals['unscored'] );
     }
 }

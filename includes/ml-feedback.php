@@ -184,14 +184,15 @@ function ddo_cleanup_feedback_data() {
 function ddo_prepare_feedback_payload( $payload ) {
     $payload      = is_array( $payload ) ? $payload : array();
     $event_name   = isset( $payload['event'] ) ? sanitize_key( $payload['event'] ) : '';
-    $score        = isset( $payload['score'] ) ? (int) $payload['score'] : 0;
+    $score        = isset( $payload['score'] ) ? (int) $payload['score'] : null;
     $client_token = isset( $payload['client_id'] ) ? sanitize_text_field( $payload['client_id'] ) : '';
     $campaign_id  = isset( $payload['campaign_id'] ) ? sanitize_text_field( $payload['campaign_id'] ) : '';
     $ad_id        = isset( $payload['ad_id'] ) ? sanitize_text_field( $payload['ad_id'] ) : '';
 
     return array(
         'event'      => $event_name,
-        'score'      => max( 0, min( 10, $score ) ),
+        'score'      => null !== $score ? max( 0, min( 10, $score ) ) : null,
+        'isScored'   => null !== $score,
         'clientHash' => '' !== $client_token ? wp_hash( $client_token ) : '',
         'campaignId' => '' !== $campaign_id ? $campaign_id : 'general',
         'adId'       => '' !== $ad_id ? $ad_id : 'general',
@@ -222,7 +223,7 @@ function ddo_store_feedback_payload( $payload ) {
         return new WP_Error( 'ddo_feedback_event_format_invalid', __( 'Feedback event bevat ongeldige tekens.', 'data-driven-optimizer' ), array( 'status' => 422 ) );
     }
 
-    if ( $prepared['score'] < 0 || $prepared['score'] > 10 ) {
+    if ( $prepared['isScored'] && ( $prepared['score'] < 0 || $prepared['score'] > 10 ) ) {
         return new WP_Error( 'ddo_feedback_score_range_invalid', __( 'Feedback score moet tussen 0 en 10 liggen.', 'data-driven-optimizer' ), array( 'status' => 422 ) );
     }
 
@@ -248,9 +249,10 @@ function ddo_store_feedback_payload( $payload ) {
             'status'         => 'open',
             'event_name'     => $prepared['event'],
             'score'          => $prepared['score'],
+            'is_scored'      => $prepared['isScored'] ? 1 : 0,
             'client_hash'    => $prepared['clientHash'],
         ),
-        array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' )
+        array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s' )
     );
 
     if ( false === $result ) {
@@ -288,10 +290,10 @@ function ddo_get_feedback_summary( $filters = array() ) {
 
     $totals_query = "SELECT
         COUNT(*) AS total_items,
-        ROUND(AVG(score), 2) AS average_score,
-        MAX(score) AS highest_score,
-        MIN(score) AS lowest_score,
-        SUM(CASE WHEN score IS NULL THEN 1 ELSE 0 END) AS unscored_items
+        ROUND(AVG(CASE WHEN is_scored = 1 THEN score ELSE NULL END), 2) AS average_score,
+        MAX(CASE WHEN is_scored = 1 THEN score ELSE NULL END) AS highest_score,
+        MIN(CASE WHEN is_scored = 1 THEN score ELSE NULL END) AS lowest_score,
+        SUM(CASE WHEN is_scored = 0 OR score IS NULL THEN 1 ELSE 0 END) AS unscored_items
         FROM {$feedback_table}{$where_clause}";
 
     if ( ! empty( $where_args ) ) {
@@ -305,7 +307,7 @@ function ddo_get_feedback_summary( $filters = array() ) {
         $event_order = 'average_score DESC, total_items DESC';
     }
 
-    $events_query = "SELECT event_name, COUNT(*) AS total_items, ROUND(AVG(score), 2) AS average_score
+    $events_query = "SELECT event_name, COUNT(*) AS total_items, ROUND(AVG(CASE WHEN is_scored = 1 THEN score ELSE NULL END), 2) AS average_score
         FROM {$feedback_table}
         WHERE event_name <> ''";
 
@@ -428,6 +430,21 @@ function ddo_filter_feedback_rows( $rows, $filters ) {
     );
 }
 
+
+/**
+ * Bepaal of een feedbackregel een score bevat.
+ *
+ * @param array $row Feedbackregel.
+ * @return bool
+ */
+function ddo_feedback_row_has_score( $row ) {
+    if ( isset( $row['is_scored'] ) ) {
+        return 1 === (int) $row['is_scored'];
+    }
+
+    return isset( $row['score'] ) && '' !== $row['score'] && null !== $row['score'];
+}
+
 /**
  * Bereken totaal-KPI's over feedbackregels.
  *
@@ -440,7 +457,7 @@ function ddo_calculate_feedback_totals( $rows ) {
     $total_count  = count( $rows );
 
     foreach ( $rows as $row ) {
-        $has_score = isset( $row['score'] ) && '' !== $row['score'] && null !== $row['score'];
+        $has_score = ddo_feedback_row_has_score( $row );
 
         if ( ! $has_score ) {
             $unscored++;
@@ -487,7 +504,7 @@ function ddo_aggregate_feedback_events( $rows, $sort ) {
 
         $events[ $event_name ]['total_items']++;
 
-        if ( isset( $row['score'] ) && '' !== $row['score'] && null !== $row['score'] ) {
+        if ( ddo_feedback_row_has_score( $row ) ) {
             $events[ $event_name ]['score_sum']   += (float) $row['score'];
             $events[ $event_name ]['score_count'] += 1;
         }
