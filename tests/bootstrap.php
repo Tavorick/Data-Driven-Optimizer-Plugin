@@ -218,7 +218,7 @@ class DDO_Fake_WPDB {
         $unscored = 0;
 
         foreach ( $rows as $row ) {
-            $has_score = isset( $row['is_scored'] ) ? 1 === (int) $row['is_scored'] : isset( $row['score'] ) && null !== $row['score'];
+            $has_score = isset( $row['is_scored'] ) ? ( 1 === (int) $row['is_scored'] && isset( $row['score'] ) && null !== $row['score'] ) : isset( $row['score'] ) && null !== $row['score'];
 
             if ( ! $has_score ) {
                 $unscored++;
@@ -269,7 +269,7 @@ class DDO_Fake_WPDB {
 
             $events[ $event_name ]['total_items']++;
 
-            $has_score = isset( $row['is_scored'] ) ? 1 === (int) $row['is_scored'] : isset( $row['score'] ) && null !== $row['score'];
+            $has_score = isset( $row['is_scored'] ) ? ( 1 === (int) $row['is_scored'] && isset( $row['score'] ) && null !== $row['score'] ) : isset( $row['score'] ) && null !== $row['score'];
             if ( $has_score ) {
                 $events[ $event_name ]['score_sum']    += (float) $row['score'];
                 $events[ $event_name ]['scored_items'] += 1;

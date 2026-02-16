@@ -187,7 +187,8 @@ function ddo_cleanup_feedback_data() {
 function ddo_prepare_feedback_payload( $payload ) {
     $payload      = is_array( $payload ) ? $payload : array();
     $event_name   = isset( $payload['event'] ) ? sanitize_key( $payload['event'] ) : '';
-    $score        = isset( $payload['score'] ) ? (int) $payload['score'] : null;
+    $has_score    = array_key_exists( 'score', $payload ) && '' !== $payload['score'] && null !== $payload['score'];
+    $score        = $has_score ? (int) $payload['score'] : null;
     $client_token = isset( $payload['client_id'] ) ? sanitize_text_field( $payload['client_id'] ) : '';
     $campaign_id  = isset( $payload['campaign_id'] ) ? sanitize_text_field( $payload['campaign_id'] ) : '';
     $ad_id        = isset( $payload['ad_id'] ) ? sanitize_text_field( $payload['ad_id'] ) : '';
@@ -195,7 +196,7 @@ function ddo_prepare_feedback_payload( $payload ) {
     return array(
         'event'      => $event_name,
         'score'      => null !== $score ? max( 0, min( 10, $score ) ) : null,
-        'isScored'   => null !== $score,
+        'isScored'   => $has_score,
         'clientHash' => '' !== $client_token ? wp_hash( $client_token ) : '',
         'campaignId' => '' !== $campaign_id ? $campaign_id : 'general',
         'adId'       => '' !== $ad_id ? $ad_id : 'general',
@@ -296,7 +297,7 @@ function ddo_get_feedback_summary( $filters = array() ) {
         ROUND(AVG(CASE WHEN is_scored = 1 THEN score ELSE NULL END), 2) AS average_score,
         MAX(CASE WHEN is_scored = 1 THEN score ELSE NULL END) AS highest_score,
         MIN(CASE WHEN is_scored = 1 THEN score ELSE NULL END) AS lowest_score,
-        SUM(CASE WHEN is_scored = 0 OR score IS NULL THEN 1 ELSE 0 END) AS unscored_items
+        SUM(CASE WHEN is_scored = 0 THEN 1 ELSE 0 END) AS unscored_items
         FROM {$feedback_table}{$where_clause}";
 
     if ( ! empty( $where_args ) ) {
@@ -442,7 +443,7 @@ function ddo_filter_feedback_rows( $rows, $filters ) {
  */
 function ddo_feedback_row_has_score( $row ) {
     if ( isset( $row['is_scored'] ) ) {
-        return 1 === (int) $row['is_scored'];
+        return 1 === (int) $row['is_scored'] && isset( $row['score'] ) && '' !== $row['score'] && null !== $row['score'];
     }
 
     return isset( $row['score'] ) && '' !== $row['score'] && null !== $row['score'];

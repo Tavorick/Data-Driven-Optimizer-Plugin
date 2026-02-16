@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'DDO_SCHEMA_VERSION', '1.2.0' );
+define( 'DDO_SCHEMA_VERSION', '1.3.0' );
 
 /**
  * Create or update all plugin tables.
@@ -114,7 +114,7 @@ function ddo_install_database_schema() {
     dbDelta( $sql_concepts );
     dbDelta( $sql_feedback );
 
-    ddo_migrate_feedback_score_semantics( $table_feedback );
+    ddo_migrate_feedback_scoring_model( $table_feedback );
 
     update_option( 'ddo_schema_version', DDO_SCHEMA_VERSION );
 }
@@ -131,11 +131,11 @@ function ddo_maybe_upgrade_database_schema() {
 }
 
 /**
- * Migreer score-semantiek zodat ongescoorde feedback onderscheidbaar wordt van score 0.
+ * Migreer scoring-model zodat is_scored leidend is voor scored/unscored semantiek.
  *
  * @param string $table_feedback Naam van de feedbacktabel.
  */
-function ddo_migrate_feedback_score_semantics( $table_feedback ) {
+function ddo_migrate_feedback_scoring_model( $table_feedback ) {
     global $wpdb;
 
     if ( empty( $table_feedback ) ) {
@@ -147,5 +147,26 @@ function ddo_migrate_feedback_score_semantics( $table_feedback ) {
         "UPDATE {$table_feedback}
         SET is_scored = 0, score = NULL
         WHERE score = 0 AND ( feedback_text = '' OR feedback_text IS NULL )"
+    );
+
+    // Oudere datasets zonder expliciete is_scored-waarde erven score-aanwezigheid.
+    $wpdb->query(
+        "UPDATE {$table_feedback}
+        SET is_scored = 1
+        WHERE score IS NOT NULL AND ( is_scored IS NULL )"
+    );
+
+    // Rows zonder score moeten altijd als unscored worden behandeld.
+    $wpdb->query(
+        "UPDATE {$table_feedback}
+        SET is_scored = 0
+        WHERE score IS NULL"
+    );
+
+    // is_scored=0 is leidend: verwijder eventuele score om ambiguiteit te voorkomen.
+    $wpdb->query(
+        "UPDATE {$table_feedback}
+        SET score = NULL
+        WHERE is_scored = 0"
     );
 }

@@ -46,6 +46,20 @@ class FeedbackPayloadTest extends TestCase {
         $this->assertFalse( $payload['isScored'] );
     }
 
+    public function test_prepare_feedback_payload_treats_zero_score_as_scored(): void {
+        $payload = ddo_prepare_feedback_payload(
+            array(
+                'event'       => 'cta_click',
+                'score'       => 0,
+                'campaign_id' => 'cmp-1',
+                'ad_id'       => 'ad-1',
+            )
+        );
+
+        $this->assertSame( 0, $payload['score'] );
+        $this->assertTrue( $payload['isScored'] );
+    }
+
     public function test_ddo_feedback_test_data_isolation_is_explicit(): void {
         global $wpdb;
 
@@ -80,14 +94,20 @@ class FeedbackPayloadTest extends TestCase {
         $this->assertNull( $wpdb->feedback_rows[0]['score'] );
     }
 
-    public function test_feedback_score_semantics_migration_updates_legacy_zero_rows(): void {
+    public function test_feedback_scoring_model_migration_updates_semantics_rows(): void {
         global $wpdb;
 
-        ddo_migrate_feedback_score_semantics( $wpdb->prefix . 'ddo_feedback' );
+        ddo_migrate_feedback_scoring_model( $wpdb->prefix . 'ddo_feedback' );
 
-        $this->assertNotEmpty( $wpdb->queries );
+        $this->assertCount( 4, $wpdb->queries );
         $this->assertStringContainsString( 'SET is_scored = 0, score = NULL', $wpdb->queries[0] );
         $this->assertStringContainsString( 'WHERE score = 0', $wpdb->queries[0] );
+        $this->assertStringContainsString( 'SET is_scored = 1', $wpdb->queries[1] );
+        $this->assertStringContainsString( 'is_scored IS NULL', $wpdb->queries[1] );
+        $this->assertStringContainsString( 'SET is_scored = 0', $wpdb->queries[2] );
+        $this->assertStringContainsString( 'WHERE score IS NULL', $wpdb->queries[2] );
+        $this->assertStringContainsString( 'SET score = NULL', $wpdb->queries[3] );
+        $this->assertStringContainsString( 'WHERE is_scored = 0', $wpdb->queries[3] );
     }
 
     public function test_normalize_feedback_filters_rejects_invalid_values(): void {
@@ -243,6 +263,44 @@ class FeedbackPayloadTest extends TestCase {
         $this->assertSame( 2, (int) $summary['events'][0]['total_items'] );
         $this->assertSame( 3, $summary['recent'][0]['id'] );
         $this->assertSame( array( 'days' => 7, 'sort' => 'count_desc' ), $summary['filters'] );
+    }
+
+
+    public function test_get_feedback_summary_sql_route_unscored_kpi_uses_is_scored_flag(): void {
+        global $wpdb;
+
+        $wpdb->feedback_rows = array(
+            array(
+                'id'            => 1,
+                'event_name'    => 'flagged_unscored',
+                'score'         => 4,
+                'is_scored'     => 0,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+                'status'        => 'open',
+                'campaign_id'   => 'c1',
+                'ad_id'         => 'a1',
+            ),
+            array(
+                'id'            => 2,
+                'event_name'    => 'scored',
+                'score'         => 0,
+                'is_scored'     => 1,
+                'feedback_date' => gmdate( 'Y-m-d' ),
+                'status'        => 'open',
+                'campaign_id'   => 'c1',
+                'ad_id'         => 'a2',
+            ),
+        );
+
+        $summary = ddo_get_feedback_summary(
+            array(
+                'days' => 0,
+                'sort' => 'count_desc',
+            )
+        );
+
+        $this->assertSame( 1, $summary['totals']['unscored'] );
+        $this->assertSame( 0.0, $summary['totals']['averageScore'] );
     }
 
     public function test_get_feedback_summary_sql_route_applies_score_sort(): void {
