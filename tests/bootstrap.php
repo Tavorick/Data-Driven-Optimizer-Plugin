@@ -98,6 +98,7 @@ function do_action( $hook ) {
 }
 function wp_salt( $scheme = '' ) { return 'salt-' . $scheme; }
 function wp_hash( $value ) { return hash( 'sha256', (string) $value ); }
+function wp_json_encode( $value ) { return json_encode( $value ); }
 function rest_ensure_response( $value ) { return $value; }
 
 function get_option( $name, $default = false ) {

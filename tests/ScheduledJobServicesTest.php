@@ -51,6 +51,26 @@ class ScheduledJobServicesTest extends TestCase {
         $this->assertArrayNotHasKey( 'last_result', $metadata['ddo_hourly_fetch'] );
     }
 
+
+    public function test_weekly_retrain_job_stores_structured_success_result(): void {
+        ddo_set_ml_feedback_retrain_service(
+            function () {
+                return array(
+                    'trained_samples' => 33,
+                );
+            }
+        );
+
+        ddo_run_weekly_retrain_job();
+
+        $metadata = ddo_get_scheduler_job_metadata();
+
+        $this->assertSame( 33, $metadata['ddo_weekly_retrain']['last_result']['records_processed'] );
+        $this->assertSame( '', $metadata['ddo_weekly_retrain']['last_result']['error_code'] );
+        $this->assertArrayHasKey( 'duration_ms', $metadata['ddo_weekly_retrain']['last_result'] );
+        $this->assertArrayHasKey( 'last_success', $metadata['ddo_weekly_retrain'] );
+    }
+
     public function test_weekly_retrain_job_error_is_handled_by_scheduler_executor(): void {
         ddo_set_ml_feedback_retrain_service(
             function () {
