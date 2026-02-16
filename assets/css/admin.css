@@ -10,6 +10,84 @@
     font-size: 14px;
 }
 
+.ddo-section-nav {
+    position: sticky;
+    top: 32px;
+    z-index: 20;
+    margin: 20px 0 24px;
+    padding-top: 8px;
+    background: #fff;
+}
+
+.ddo-section-nav .nav-tab {
+    scroll-margin-top: 120px;
+}
+
+.ddo-section-nav .nav-tab:focus,
+.ddo-section-nav .nav-tab:hover {
+    color: #135e96;
+}
+
+.ddo-section-nav .nav-tab:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.ddo-section-nav .nav-tab {
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.ddo-admin-wrap .ddo-section-nav .nav-tab[href="#ddo-section-instellingen"] {
+    background: #fff;
+    border-bottom-color: #fff;
+}
+
+.ddo-admin-wrap:has(#ddo-section-scheduler:target) .ddo-section-nav .nav-tab[href="#ddo-section-instellingen"],
+.ddo-admin-wrap:has(#ddo-section-feedback:target) .ddo-section-nav .nav-tab[href="#ddo-section-instellingen"],
+.ddo-admin-wrap:has(#ddo-section-concept:target) .ddo-section-nav .nav-tab[href="#ddo-section-instellingen"] {
+    background: #f6f7f7;
+    border-bottom-color: #dcdcde;
+}
+
+.ddo-admin-wrap:has(#ddo-section-instellingen:target) .ddo-section-nav .nav-tab[href="#ddo-section-instellingen"],
+.ddo-admin-wrap:has(#ddo-section-scheduler:target) .ddo-section-nav .nav-tab[href="#ddo-section-scheduler"],
+.ddo-admin-wrap:has(#ddo-section-feedback:target) .ddo-section-nav .nav-tab[href="#ddo-section-feedback"],
+.ddo-admin-wrap:has(#ddo-section-concept:target) .ddo-section-nav .nav-tab[href="#ddo-section-concept"] {
+    background: #fff;
+    border-bottom-color: #fff;
+    color: #1d2327;
+    font-weight: 600;
+}
+.ddo-admin-section {
+    margin: 0 0 36px;
+    padding: 20px 0 6px;
+    border-top: 1px solid #dcdcde;
+    scroll-margin-top: 120px;
+}
+
+.ddo-admin-section h2 {
+    margin: 0 0 14px;
+}
+
+.ddo-admin-section h3 {
+    margin: 0 0 12px;
+    font-size: 15px;
+}
+
+.ddo-admin-section:target {
+    animation: ddo-section-highlight 1.2s ease-out;
+}
+
+@keyframes ddo-section-highlight {
+    0% {
+        background: #f0f6fc;
+    }
+
+    100% {
+        background: transparent;
+    }
+}
+
 .ddo-feedback-cards {
     display: grid;
     grid-template-columns: repeat(2, minmax(180px, 1fr));
@@ -68,4 +146,17 @@
 
 .ddo-scheduler-run-form {
     margin: 0;
+}
+
+@media (max-width: 782px) {
+    .ddo-section-nav {
+        position: static;
+        top: auto;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .ddo-feedback-cards {
+        grid-template-columns: 1fr;
+    }
 }
