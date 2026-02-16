@@ -17,10 +17,15 @@ class RestRoutesTest extends TestCase {
         $routes = $ddo_test_state['registered_routes'];
         $this->assertCount( 3, $routes );
 
+        $callbacks_by_route = array();
         foreach ( $routes as $route ) {
             $this->assertSame( 'ddo/v1', $route['namespace'] );
-            $this->assertSame( 'ddo_api_manage_options_permission', $route['args']['permission_callback'] );
+            $callbacks_by_route[ $route['route'] ] = $route['args']['permission_callback'];
         }
+
+        $this->assertSame( 'ddo_api_manage_options_permission', $callbacks_by_route['/status'] );
+        $this->assertSame( 'ddo_api_feedback_permission', $callbacks_by_route['/feedback'] );
+        $this->assertSame( 'ddo_api_manage_options_permission', $callbacks_by_route['/feedback/summary'] );
     }
 
     public function test_permission_callback_checks_manage_options_capability(): void {

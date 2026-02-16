@@ -34,7 +34,7 @@ function ddo_register_rest_routes() {
         array(
             'methods'             => 'POST',
             'callback'            => 'ddo_api_submit_feedback',
-            'permission_callback' => 'ddo_api_manage_options_permission',
+            'permission_callback' => 'ddo_api_feedback_permission',
             'args'                => array(
                 'event'       => array(
                     'required'          => true,
@@ -279,6 +279,152 @@ function ddo_api_get_feedback_summary() {
  */
 function ddo_api_manage_options_permission() {
     return current_user_can( 'manage_options' );
+}
+
+/**
+ * Controleer REST API permissies voor publieke feedback ingest.
+ *
+ * @param WP_REST_Request $request REST request object.
+ * @return true|WP_Error
+ */
+function ddo_api_feedback_permission( WP_REST_Request $request ) {
+    $params = $request->get_params();
+
+    $hardening_result = ddo_api_validate_feedback_payload_minimum( $params );
+    if ( is_wp_error( $hardening_result ) ) {
+        return $hardening_result;
+    }
+
+    $nonce = isset( $params['nonce'] ) ? sanitize_text_field( (string) $params['nonce'] ) : '';
+    if ( '' === $nonce || 1 !== preg_match( '/^[A-Za-z0-9_-]{16,128}$/', $nonce ) ) {
+        return new WP_Error( 'ddo_feedback_nonce_invalid', __( 'Ongeldige feedback nonce.', 'data-driven-optimizer' ), array( 'status' => 403 ) );
+    }
+
+    $timestamp = isset( $params['timestamp'] ) ? (int) $params['timestamp'] : 0;
+    if ( $timestamp <= 0 || abs( time() - $timestamp ) > 5 * MINUTE_IN_SECONDS ) {
+        return new WP_Error( 'ddo_feedback_timestamp_invalid', __( 'Feedback request is verlopen.', 'data-driven-optimizer' ), array( 'status' => 403 ) );
+    }
+
+    $signature = isset( $params['signature'] ) ? sanitize_text_field( (string) $params['signature'] ) : '';
+    if ( '' === $signature || 1 !== preg_match( '/^[a-f0-9]{64}$/', strtolower( $signature ) ) ) {
+        return new WP_Error( 'ddo_feedback_signature_invalid', __( 'Ongeldige feedback signature.', 'data-driven-optimizer' ), array( 'status' => 403 ) );
+    }
+
+    $signed_payload = array(
+        'event'       => isset( $params['event'] ) ? ddo_api_sanitize_feedback_event( $params['event'] ) : '',
+        'score'       => isset( $params['score'] ) ? (string) ddo_api_sanitize_feedback_score( $params['score'] ) : '',
+        'client_id'   => isset( $params['client_id'] ) ? ddo_api_sanitize_feedback_identifier( $params['client_id'] ) : '',
+        'campaign_id' => isset( $params['campaign_id'] ) ? ddo_api_sanitize_feedback_identifier( $params['campaign_id'] ) : '',
+        'ad_id'       => isset( $params['ad_id'] ) ? ddo_api_sanitize_feedback_identifier( $params['ad_id'] ) : '',
+    );
+
+    $expected_signature = hash_hmac(
+        'sha256',
+        $nonce . '|' . $timestamp . '|' . wp_json_encode( $signed_payload ),
+        ddo_api_get_feedback_signature_secret()
+    );
+
+    if ( ! hash_equals( $expected_signature, strtolower( $signature ) ) ) {
+        return new WP_Error( 'ddo_feedback_signature_mismatch', __( 'Feedback signature komt niet overeen.', 'data-driven-optimizer' ), array( 'status' => 403 ) );
+    }
+
+    $rate_limit_result = ddo_api_check_feedback_rate_limit( $nonce, $signed_payload );
+    if ( is_wp_error( $rate_limit_result ) ) {
+        return $rate_limit_result;
+    }
+
+    return true;
+}
+
+/**
+ * Geef gedeeld secret voor feedback signature checks.
+ *
+ * @return string
+ */
+function ddo_api_get_feedback_signature_secret() {
+    $stored_secret = (string) get_option( 'ddo_feedback_webhook_secret', '' );
+
+    if ( '' !== $stored_secret ) {
+        return $stored_secret;
+    }
+
+    return wp_hash( wp_salt( 'auth' ) . '|ddo_feedback_signature' );
+}
+
+/**
+ * Voer minimale payload checks uit voordat validatie start.
+ *
+ * @param array $params Request parameters.
+ * @return true|WP_Error
+ */
+function ddo_api_validate_feedback_payload_minimum( $params ) {
+    if ( ! is_array( $params ) ) {
+        return new WP_Error( 'ddo_feedback_payload_invalid', __( 'Feedback payload is ongeldig.', 'data-driven-optimizer' ), array( 'status' => 400 ) );
+    }
+
+    if ( count( $params ) > 20 ) {
+        return new WP_Error( 'ddo_feedback_payload_too_large', __( 'Feedback payload bevat te veel velden.', 'data-driven-optimizer' ), array( 'status' => 413 ) );
+    }
+
+    $required_fields = array( 'event', 'score', 'client_id', 'campaign_id', 'ad_id', 'nonce', 'signature', 'timestamp' );
+    foreach ( $required_fields as $field ) {
+        if ( ! isset( $params[ $field ] ) || '' === trim( (string) $params[ $field ] ) ) {
+            return new WP_Error( 'ddo_feedback_payload_missing_field', sprintf( __( 'Vereist feedback veld ontbreekt: %s.', 'data-driven-optimizer' ), $field ), array( 'status' => 400 ) );
+        }
+    }
+
+    $payload_size = strlen( wp_json_encode( $params ) );
+    if ( $payload_size < 40 ) {
+        return new WP_Error( 'ddo_feedback_payload_too_small', __( 'Feedback payload is te klein.', 'data-driven-optimizer' ), array( 'status' => 400 ) );
+    }
+
+    if ( $payload_size > 4096 ) {
+        return new WP_Error( 'ddo_feedback_payload_too_large', __( 'Feedback payload is te groot.', 'data-driven-optimizer' ), array( 'status' => 413 ) );
+    }
+
+    return true;
+}
+
+/**
+ * Controleer feedback ingest op throttling per IP + payload hash.
+ *
+ * @param string $nonce          Request nonce.
+ * @param array  $signed_payload Gesigneerde payload.
+ * @return true|WP_Error
+ */
+function ddo_api_check_feedback_rate_limit( $nonce, $signed_payload ) {
+    $ip_address = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( (string) $_SERVER['REMOTE_ADDR'] ) : 'unknown';
+    $fingerprint_source = $ip_address . '|' . $nonce . '|' . wp_json_encode( $signed_payload );
+    $fingerprint        = wp_hash( $fingerprint_source );
+
+    $window_seconds = 5 * MINUTE_IN_SECONDS;
+    $max_attempts   = 30;
+    $now            = time();
+    $state          = get_option( 'ddo_feedback_rate_limit_state', array() );
+    $bucket         = isset( $state[ $fingerprint ] ) ? $state[ $fingerprint ] : array(
+        'count'    => 0,
+        'window'   => $window_seconds,
+        'expires'  => $now + $window_seconds,
+    );
+
+    if ( ! isset( $bucket['expires'] ) || (int) $bucket['expires'] <= $now ) {
+        $bucket['count']   = 0;
+        $bucket['expires'] = $now + $window_seconds;
+    }
+
+    $bucket['count'] = isset( $bucket['count'] ) ? (int) $bucket['count'] + 1 : 1;
+
+    if ( $bucket['count'] > $max_attempts ) {
+        $state[ $fingerprint ] = $bucket;
+        update_option( 'ddo_feedback_rate_limit_state', $state );
+
+        return new WP_Error( 'ddo_feedback_rate_limited', __( 'Te veel feedback requests. Probeer later opnieuw.', 'data-driven-optimizer' ), array( 'status' => 429 ) );
+    }
+
+    $state[ $fingerprint ] = $bucket;
+    update_option( 'ddo_feedback_rate_limit_state', $state );
+
+    return true;
 }
 
 /**
