@@ -108,8 +108,8 @@ class CronEventsTest extends TestCase {
         $this->assertArrayHasKey( 'last_success', $metadata );
         $this->assertArrayHasKey( 'last_run_duration', $metadata );
         $this->assertSame( '', $metadata['last_error_message'] );
-        $this->assertIsInt( $metadata['last_run_duration'] );
-        $this->assertGreaterThanOrEqual( 0, $metadata['last_run_duration'] );
+        $this->assertIsFloat( $metadata['last_run_duration'] );
+        $this->assertGreaterThanOrEqual( 0.0, $metadata['last_run_duration'] );
     }
 
     public function test_execute_scheduled_job_updates_error_metadata_with_duration(): void {
@@ -128,8 +128,8 @@ class CronEventsTest extends TestCase {
         $this->assertArrayHasKey( 'last_error_at', $metadata );
         $this->assertArrayHasKey( 'last_run_duration', $metadata );
         $this->assertSame( 'kapot', $metadata['last_error_message'] );
-        $this->assertIsInt( $metadata['last_run_duration'] );
-        $this->assertGreaterThanOrEqual( 0, $metadata['last_run_duration'] );
+        $this->assertIsFloat( $metadata['last_run_duration'] );
+        $this->assertGreaterThanOrEqual( 0.0, $metadata['last_run_duration'] );
     }
 
 

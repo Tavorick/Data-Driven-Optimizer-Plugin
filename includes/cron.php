@@ -134,27 +134,27 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
     try {
         call_user_func( $callback );
 
-        $duration = max( 0, (int) round( microtime( true ) - $started_at ) );
+        $duration = max( 0, microtime( true ) - $started_at );
 
         ddo_update_scheduler_job_metadata(
             $job_name,
             array(
                 'last_success'       => time(),
-                'last_run_duration'  => $duration,
+                'last_run_duration'  => round( $duration, 3 ),
                 'last_error_message' => '',
             )
         );
 
         ddo_log_scheduler_event( $job_name, 'job-end' );
     } catch ( Exception $exception ) {
-        $duration = max( 0, (int) round( microtime( true ) - $started_at ) );
+        $duration = max( 0, microtime( true ) - $started_at );
 
         ddo_update_scheduler_job_metadata(
             $job_name,
             array(
                 'last_error_message' => $exception->getMessage(),
                 'last_error_at'      => time(),
-                'last_run_duration'  => $duration,
+                'last_run_duration'  => round( $duration, 3 ),
             )
         );
 
@@ -168,14 +168,14 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
             )
         );
     } catch ( Error $error ) {
-        $duration = max( 0, (int) round( microtime( true ) - $started_at ) );
+        $duration = max( 0, microtime( true ) - $started_at );
 
         ddo_update_scheduler_job_metadata(
             $job_name,
             array(
                 'last_error_message' => $error->getMessage(),
                 'last_error_at'      => time(),
-                'last_run_duration'  => $duration,
+                'last_run_duration'  => round( $duration, 3 ),
             )
         );
 

@@ -438,12 +438,12 @@ function ddo_get_scheduler_stale_cause_text( $last_success, $seconds_since_ok, $
  * @return string
  */
 function ddo_format_scheduler_duration_seconds( $duration_seconds ) {
-    $duration_seconds = max( 0, (int) $duration_seconds );
+    $duration_seconds = max( 0, (float) $duration_seconds );
 
     return sprintf(
         /* translators: %s: duur in seconden. */
         __( '%s sec', 'data-driven-optimizer' ),
-        number_format_i18n( $duration_seconds )
+        number_format_i18n( $duration_seconds, 3 )
     );
 }
 
@@ -464,7 +464,7 @@ function ddo_render_scheduler_status_block() {
         $last_start         = isset( $job_meta['last_start'] ) ? (int) $job_meta['last_start'] : 0;
         $last_success       = isset( $job_meta['last_success'] ) ? (int) $job_meta['last_success'] : 0;
         $last_error_message = isset( $job_meta['last_error_message'] ) ? (string) $job_meta['last_error_message'] : '';
-        $last_duration      = isset( $job_meta['last_run_duration'] ) ? (int) $job_meta['last_run_duration'] : 0;
+        $last_duration      = isset( $job_meta['last_run_duration'] ) ? (float) $job_meta['last_run_duration'] : 0;
         $next_run           = wp_next_scheduled( $job_name );
         $expected_interval  = isset( $job_config['expected_interval'] ) ? (int) $job_config['expected_interval'] : HOUR_IN_SECONDS;
         $stale_threshold    = 2 * $expected_interval;
