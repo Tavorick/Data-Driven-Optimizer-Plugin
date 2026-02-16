@@ -5,6 +5,32 @@ Versie: 1.1
 
 1. Executive Summary
 
+## Handmatige testmatrix (compact)
+
+| Scenario | Stappen | Verwacht resultaat |
+|---|---|---|
+| Instellingen opslaan | 1) Open **DD Optimizer > Instellingen**. 2) Wijzig minimaal 1 waarde. 3) Klik **Instellingen opslaan**. | Success-notice zichtbaar, waarden blijven behouden na refresh. |
+| Scheduler run-now | 1) Open **DD Optimizer > Scheduler**. 2) Klik **Run now** (indien aanwezig). | Actie-notice bevestigt start/resultaat; scheduler-statusblok ververst zonder foutmelding. |
+| AJAX preview succes/fout | 1) Open **Conceptinvoer**. 2) Trigger preview met geldige input. 3) Trigger preview met ongeldige/lege input of forceer fout. | Bij succes verschijnt preview-output in live region; bij fout verschijnt duidelijke foutmelding in live region. |
+| Feedback leeg/gevuld | 1) Open **Feedback inzichten** in een lege omgeving. 2) Herhaal met aanwezige feedbackdata. | Leeg: duidelijke “geen data”-melding. Gevuld: samenvattingskaarten + eventtabel met waarden. |
+
+## Definition of Done (UI tickets)
+
+Een UI-ticket is pas gereed als alle onderstaande punten aantoonbaar zijn afgevinkt:
+
+- **A11y verplicht**: labels, focus-states, keyboard-navigatie en live-regions (waar relevant) voldoen aan WCAG AA-baseline.
+- **i18n verplicht**: alle zichtbare UI-strings staan in vertaalfuncties en gebruiken het plugin text-domain.
+- **Responsive verplicht**: gedrag is gevalideerd op smalle en brede admin viewports zonder verlies van functionaliteit/leesbaarheid.
+- **State handling verplicht**: loading/succes/fout/lege-status zijn expliciet afgehandeld in UI en feedbackberichten.
+
+## Changelog (admin-UI wijzigingen)
+
+Gebruik deze sectie om zichtbare admin-UI wijzigingen traceerbaar vast te leggen.
+
+| Datum | Onderdeel | Wijziging | Impact voor gebruiker |
+|---|---|---|---|
+| 2026-02-16 | QA & documentatie | Handmatige testmatrix toegevoegd, UI Definition of Done aangescherpt en render-output checks in tests uitgebreid. | Snellere regressiecontrole en duidelijkere acceptatiecriteria voor UI-tickets. |
+
 ## Admin UI conventions
 - **Design tokens**: admin-styling gebruikt herbruikbare CSS-variabelen voor card-oppervlak (achtergrond, border, radius, shadow), spacing (`8/12/16/24`) en typografie (`heading/body/meta`).
 - **Consistente componenttaal**: `.ddo-admin-wrap`, cards en tabelcontainers delen dezelfde card-surface zodat secties visueel één geheel vormen.
