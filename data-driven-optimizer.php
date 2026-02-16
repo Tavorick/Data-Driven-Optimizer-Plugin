@@ -47,6 +47,10 @@ function ddo_activate_plugin() {
         add_option( 'ddo_api_key_secondary', '' );
     }
 
+    if ( false === get_option( 'ddo_feedback_retention_days' ) ) {
+        add_option( 'ddo_feedback_retention_days', 180 );
+    }
+
     ddo_maybe_migrate_api_keys_to_encrypted();
 
     $legacy_options = get_option( 'ddo_options', array() );

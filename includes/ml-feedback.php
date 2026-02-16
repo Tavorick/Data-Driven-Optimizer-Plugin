@@ -32,6 +32,80 @@ function ddo_process_ml_feedback_retrain() {
     do_action( 'ddo_ml_feedback_retrain' );
 }
 
+
+/**
+ * Handler voor dagelijkse feedback cleanup.
+ */
+function ddo_run_daily_feedback_cleanup_job() {
+    ddo_execute_scheduled_job(
+        'ddo_daily_feedback_cleanup',
+        function () {
+            $deleted_rows = ddo_cleanup_feedback_data();
+
+            ddo_log_scheduler_event(
+                'ddo_daily_feedback_cleanup',
+                'cleanup-complete',
+                'info',
+                array(
+                    'deleted_rows'   => $deleted_rows,
+                    'retention_days' => ddo_get_feedback_retention_days(),
+                )
+            );
+        }
+    );
+}
+
+/**
+ * Haal retentieperiode op voor feedbackdata.
+ *
+ * @return int
+ */
+function ddo_get_feedback_retention_days() {
+    $retention_days = (int) get_option( 'ddo_feedback_retention_days', 180 );
+
+    if ( $retention_days < 7 ) {
+        return 180;
+    }
+
+    return min( 3650, $retention_days );
+}
+
+/**
+ * Verwijder feedbackrecords ouder dan de ingestelde retentie.
+ *
+ * @return int Aantal verwijderde records.
+ */
+function ddo_cleanup_feedback_data() {
+    global $wpdb;
+
+    $feedback_table = $wpdb->prefix . 'ddo_feedback';
+    $retention_days = ddo_get_feedback_retention_days();
+    $cutoff_date    = gmdate( 'Y-m-d', time() - ( $retention_days * DAY_IN_SECONDS ) );
+
+    $deleted = $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$feedback_table} WHERE feedback_date < %s",
+            $cutoff_date
+        )
+    );
+
+    if ( false === $deleted ) {
+        ddo_log_scheduler_event(
+            'ddo_daily_feedback_cleanup',
+            'cleanup-query-failed',
+            'error',
+            array(
+                'cutoff_date'    => $cutoff_date,
+                'retention_days' => $retention_days,
+            )
+        );
+
+        return 0;
+    }
+
+    return (int) $deleted;
+}
+
 /**
  * Sanitiseer en anonimiseer feedback payload.
  *
