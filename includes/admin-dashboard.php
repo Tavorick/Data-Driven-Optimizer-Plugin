@@ -434,7 +434,7 @@ function ddo_get_scheduler_stale_cause_text( $last_success, $seconds_since_ok, $
 /**
  * Formatteer run-duur altijd in seconden voor consistente weergave.
  *
- * @param int $duration_seconds Duur in seconden.
+ * @param int|float $duration_seconds Duur in seconden.
  * @return string
  */
 function ddo_format_scheduler_duration_seconds( $duration_seconds ) {
@@ -443,7 +443,7 @@ function ddo_format_scheduler_duration_seconds( $duration_seconds ) {
     return sprintf(
         /* translators: %s: duur in seconden. */
         __( '%s sec', 'data-driven-optimizer' ),
-        number_format_i18n( $duration_seconds, 3 )
+        number_format_i18n( (int) round( $duration_seconds ) )
     );
 }
 
