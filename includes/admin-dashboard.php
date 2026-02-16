@@ -14,6 +14,7 @@ function ddo_register_admin_menu() {
     add_action( 'admin_menu', 'ddo_add_admin_menu_page' );
     add_action( 'admin_enqueue_scripts', 'ddo_enqueue_admin_assets' );
     add_action( 'admin_post_ddo_submit_concept', 'ddo_handle_concept_submit' );
+    add_action( 'admin_post_ddo_run_scheduler_job', 'ddo_handle_run_scheduler_job' );
     add_action( 'wp_ajax_ddo_preview_concept', 'ddo_handle_preview_concept_ajax' );
 }
 
@@ -95,6 +96,7 @@ function ddo_render_admin_page() {
         </p>
 
         <?php settings_errors( 'ddo_messages' ); ?>
+        <?php ddo_render_scheduler_action_notice(); ?>
 
         <form action="options.php" method="post">
             <?php
@@ -103,6 +105,11 @@ function ddo_render_admin_page() {
             submit_button( __( 'Instellingen opslaan', 'data-driven-optimizer' ) );
             ?>
         </form>
+
+        <hr />
+
+        <h2><?php esc_html_e( 'Scheduler status', 'data-driven-optimizer' ); ?></h2>
+        <?php ddo_render_scheduler_status_block(); ?>
 
         <hr />
 
@@ -246,4 +253,117 @@ function ddo_build_concept_summary( $concept_input ) {
         __( 'Concept ontvangen (%d tekens).', 'data-driven-optimizer' ),
         mb_strlen( $concept_input )
     );
+}
+
+
+/**
+ * Render eventuele statusmelding na handmatige scheduler-actie.
+ */
+function ddo_render_scheduler_action_notice() {
+    $notice = isset( $_GET['ddo_scheduler_notice'] ) ? sanitize_text_field( wp_unslash( $_GET['ddo_scheduler_notice'] ) ) : '';
+
+    if ( '' === $notice ) {
+        return;
+    }
+
+    $class   = 'updated';
+    $message = __( 'Scheduler-actie uitgevoerd.', 'data-driven-optimizer' );
+
+    if ( 'ok' === $notice ) {
+        $message = __( 'Scheduler job handmatig uitgevoerd.', 'data-driven-optimizer' );
+    } elseif ( 'invalid' === $notice ) {
+        $class   = 'notice-warning';
+        $message = __( 'Onbekende scheduler job.', 'data-driven-optimizer' );
+    } elseif ( 'forbidden' === $notice ) {
+        $class   = 'notice-error';
+        $message = __( 'Onvoldoende rechten voor scheduler-actie.', 'data-driven-optimizer' );
+    }
+
+    printf(
+        '<div class="notice %1$s is-dismissible"><p>%2$s</p></div>',
+        esc_attr( $class ),
+        esc_html( $message )
+    );
+}
+
+/**
+ * Render scheduler observability tabel met run-now acties.
+ */
+function ddo_render_scheduler_status_block() {
+    $jobs     = ddo_get_scheduler_observability_jobs();
+    $metadata = ddo_get_scheduler_job_metadata();
+    $now      = time();
+    ?>
+    <table class="widefat striped ddo-scheduler-table">
+        <thead>
+            <tr>
+                <th><?php esc_html_e( 'Job', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Laatste start', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Laatste succes', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Laatste foutmelding', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Status', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Actie', 'data-driven-optimizer' ); ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ( $jobs as $job_name => $job_config ) : ?>
+                <?php
+                $job_meta           = isset( $metadata[ $job_name ] ) && is_array( $metadata[ $job_name ] ) ? $metadata[ $job_name ] : array();
+                $last_start         = isset( $job_meta['last_start'] ) ? (int) $job_meta['last_start'] : 0;
+                $last_success       = isset( $job_meta['last_success'] ) ? (int) $job_meta['last_success'] : 0;
+                $last_error_message = isset( $job_meta['last_error_message'] ) ? (string) $job_meta['last_error_message'] : '';
+                $expected_interval  = isset( $job_config['expected_interval'] ) ? (int) $job_config['expected_interval'] : HOUR_IN_SECONDS;
+                $stale_threshold    = 2 * $expected_interval;
+                $seconds_since_ok   = $last_success > 0 ? $now - $last_success : PHP_INT_MAX;
+                $is_stale           = $seconds_since_ok > $stale_threshold;
+                $status_label       = $is_stale
+                    ? __( 'Stale', 'data-driven-optimizer' )
+                    : __( 'OK', 'data-driven-optimizer' );
+                $row_class          = $is_stale ? 'ddo-scheduler-row-stale' : 'ddo-scheduler-row-ok';
+                ?>
+                <tr class="<?php echo esc_attr( $row_class ); ?>">
+                    <td><code><?php echo esc_html( $job_name ); ?></code></td>
+                    <td><?php echo $last_start > 0 ? esc_html( wp_date( 'Y-m-d H:i:s', $last_start ) ) : esc_html__( 'Nooit', 'data-driven-optimizer' ); ?></td>
+                    <td><?php echo $last_success > 0 ? esc_html( wp_date( 'Y-m-d H:i:s', $last_success ) ) : esc_html__( 'Nooit', 'data-driven-optimizer' ); ?></td>
+                    <td><?php echo '' !== $last_error_message ? esc_html( $last_error_message ) : '&mdash;'; ?></td>
+                    <td><span class="ddo-scheduler-status-pill <?php echo esc_attr( $is_stale ? 'is-stale' : 'is-ok' ); ?>"><?php echo esc_html( $status_label ); ?></span></td>
+                    <td>
+                        <form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" class="ddo-scheduler-run-form">
+                            <input type="hidden" name="action" value="ddo_run_scheduler_job" />
+                            <input type="hidden" name="job_name" value="<?php echo esc_attr( $job_name ); ?>" />
+                            <?php wp_nonce_field( 'ddo_run_scheduler_job_' . $job_name, 'ddo_run_scheduler_job_nonce' ); ?>
+                            <?php submit_button( __( 'Run now', 'data-driven-optimizer' ), 'secondary small', 'submit', false ); ?>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php
+}
+
+/**
+ * Verwerk handmatige scheduler-run vanuit admin.
+ */
+function ddo_handle_run_scheduler_job() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_safe_redirect( admin_url( 'admin.php?page=ddo-dashboard&ddo_scheduler_notice=forbidden' ) );
+        exit;
+    }
+
+    $job_name = isset( $_POST['job_name'] ) ? sanitize_text_field( wp_unslash( $_POST['job_name'] ) ) : '';
+
+    $jobs = ddo_get_scheduler_observability_jobs();
+
+    if ( '' === $job_name || ! isset( $jobs[ $job_name ] ) ) {
+        wp_safe_redirect( admin_url( 'admin.php?page=ddo-dashboard&ddo_scheduler_notice=invalid' ) );
+        exit;
+    }
+
+    check_admin_referer( 'ddo_run_scheduler_job_' . $job_name, 'ddo_run_scheduler_job_nonce' );
+
+    do_action( $job_name );
+
+    wp_safe_redirect( admin_url( 'admin.php?page=ddo-dashboard&ddo_scheduler_notice=ok' ) );
+    exit;
 }

@@ -39,3 +39,33 @@
 .ddo-feedback-table {
     margin: 0 0 20px;
 }
+
+.ddo-scheduler-table {
+    margin: 0 0 20px;
+}
+
+.ddo-scheduler-row-stale {
+    background: #fff1f0;
+}
+
+.ddo-scheduler-status-pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ddo-scheduler-status-pill.is-ok {
+    background: #edfaef;
+    color: #207227;
+}
+
+.ddo-scheduler-status-pill.is-stale {
+    background: #fbeaea;
+    color: #9a1f1f;
+}
+
+.ddo-scheduler-run-form {
+    margin: 0;
+}
