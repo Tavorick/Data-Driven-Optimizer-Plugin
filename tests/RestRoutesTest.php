@@ -51,11 +51,18 @@ class RestRoutesTest extends TestCase {
             'campaign_id' => 'campaign-123',
             'ad_id'       => 'ad-123',
         );
+        $signed_payload = array(
+            'event'       => ddo_api_sanitize_feedback_event( $payload['event'] ),
+            'score'       => (string) ddo_api_sanitize_feedback_score( $payload['score'] ),
+            'client_id'   => ddo_api_sanitize_feedback_identifier( $payload['client_id'] ),
+            'campaign_id' => ddo_api_sanitize_feedback_identifier( $payload['campaign_id'] ),
+            'ad_id'       => ddo_api_sanitize_feedback_identifier( $payload['ad_id'] ),
+        );
         $nonce = 'feedbacknonce123456';
         $timestamp = time();
         $signature = hash_hmac(
             'sha256',
-            $nonce . '|' . $timestamp . '|' . wp_json_encode( $payload ),
+            $nonce . '|' . $timestamp . '|' . wp_json_encode( $signed_payload ),
             ddo_api_get_feedback_signature_secret()
         );
 

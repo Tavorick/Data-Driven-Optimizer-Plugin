@@ -36,6 +36,10 @@ class WP_Error {
     }
 }
 
+function is_wp_error( $value ) {
+    return $value instanceof WP_Error;
+}
+
 class WP_REST_Request {
     private $params;
 
@@ -137,7 +141,7 @@ function register_rest_route( $namespace, $route, $args ) {
     );
 }
 
-function current_user_can() {
+function current_user_can( $capability = null ) {
     global $ddo_test_state;
     return (bool) $ddo_test_state['current_user_can'];
 }
