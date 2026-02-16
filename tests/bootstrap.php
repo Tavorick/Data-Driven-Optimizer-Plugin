@@ -98,6 +98,7 @@ function do_action( $hook ) {
 }
 function wp_salt( $scheme = '' ) { return 'salt-' . $scheme; }
 function wp_hash( $value ) { return hash( 'sha256', (string) $value ); }
+function wp_json_encode( $value ) { return json_encode( $value ); }
 function rest_ensure_response( $value ) { return $value; }
 
 function get_option( $name, $default = false ) {
@@ -168,7 +169,9 @@ class DDO_Fake_WPDB {
 $wpdb = new DDO_Fake_WPDB();
 
 require_once dirname( __DIR__ ) . '/includes/settings.php';
+require_once dirname( __DIR__ ) . '/includes/logger.php';
 require_once dirname( __DIR__ ) . '/includes/api-handlers.php';
 require_once dirname( __DIR__ ) . '/includes/ml-feedback.php';
+require_once dirname( __DIR__ ) . '/includes/code-introspect.php';
 require_once dirname( __DIR__ ) . '/includes/cron.php';
 require_once dirname( __DIR__ ) . '/includes/admin-dashboard.php';

@@ -288,14 +288,83 @@ function ddo_run_hourly_fetch_job() {
     ddo_execute_scheduled_job(
         'ddo_hourly_fetch',
         function () {
-            ddo_process_api_data_fetch();
+            $result = ddo_process_api_data_fetch();
+
+            ddo_update_scheduler_job_metadata(
+                'ddo_hourly_fetch',
+                array(
+                    'last_result' => $result,
+                )
+            );
         }
     );
 }
 
 /**
- * Placeholder voor fetch-logica naar externe APIs.
+ * Configureer een custom API data fetch service.
+ *
+ * @param callable|null $service Service-callback.
+ */
+function ddo_set_api_data_fetch_service( $service ) {
+    $GLOBALS['ddo_api_data_fetch_service'] = $service;
+}
+
+/**
+ * Haal de actieve API data fetch service op.
+ *
+ * @return callable
+ */
+function ddo_get_api_data_fetch_service() {
+    $service = isset( $GLOBALS['ddo_api_data_fetch_service'] ) ? $GLOBALS['ddo_api_data_fetch_service'] : 'ddo_default_api_data_fetch_service';
+
+    if ( ! is_callable( $service ) ) {
+        return 'ddo_default_api_data_fetch_service';
+    }
+
+    return $service;
+}
+
+/**
+ * Default API client service voor geplande fetch jobs.
+ *
+ * @return array
+ */
+function ddo_default_api_data_fetch_service() {
+    return array(
+        'records_fetched' => 0,
+        'source'          => 'default-api-client',
+    );
+}
+
+/**
+ * Voer fetch-logica uit naar externe APIs.
+ *
+ * @return array
  */
 function ddo_process_api_data_fetch() {
-    do_action( 'ddo_api_data_fetch' );
+    $started_at = microtime( true );
+    $service    = ddo_get_api_data_fetch_service();
+    $payload    = call_user_func( $service );
+    $payload    = is_array( $payload ) ? $payload : array();
+
+    $records_processed = isset( $payload['records_fetched'] ) ? (int) $payload['records_fetched'] : 0;
+    $error_code        = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+
+    $result = array(
+        'job'               => 'ddo_hourly_fetch',
+        'service'           => is_string( $service ) ? $service : 'custom-api-data-fetch-service',
+        'records_processed' => max( 0, $records_processed ),
+        'duration_ms'       => (int) round( ( microtime( true ) - $started_at ) * 1000 ),
+        'error_code'        => $error_code,
+    );
+
+    if ( '' !== $error_code ) {
+        ddo_log_scheduler_event( 'ddo_hourly_fetch', 'fetch-failed', 'error', $result );
+
+        throw new RuntimeException( 'API data fetch failed.', 0 );
+    }
+
+    ddo_log_scheduler_event( 'ddo_hourly_fetch', 'fetch-complete', 'info', $result );
+
+    return $result;
 }
