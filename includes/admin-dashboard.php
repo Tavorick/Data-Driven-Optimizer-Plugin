@@ -95,46 +95,61 @@ function ddo_render_admin_page() {
             <?php echo $enabled ? esc_html__( 'Ingeschakeld', 'data-driven-optimizer' ) : esc_html__( 'Uitgeschakeld', 'data-driven-optimizer' ); ?>
         </p>
 
+        <nav class="nav-tab-wrapper ddo-section-nav" aria-label="<?php esc_attr_e( 'Dashboardsecties', 'data-driven-optimizer' ); ?>">
+            <a href="#ddo-section-instellingen" class="nav-tab"><?php esc_html_e( 'Instellingen', 'data-driven-optimizer' ); ?></a>
+            <a href="#ddo-section-scheduler" class="nav-tab"><?php esc_html_e( 'Scheduler', 'data-driven-optimizer' ); ?></a>
+            <a href="#ddo-section-feedback" class="nav-tab"><?php esc_html_e( 'Feedback inzichten', 'data-driven-optimizer' ); ?></a>
+            <a href="#ddo-section-concept" class="nav-tab"><?php esc_html_e( 'Conceptinvoer', 'data-driven-optimizer' ); ?></a>
+        </nav>
+
         <?php settings_errors( 'ddo_messages' ); ?>
         <?php ddo_render_scheduler_action_notice(); ?>
 
-        <form action="options.php" method="post">
-            <?php
-            settings_fields( 'ddo_settings_group' );
-            do_settings_sections( 'ddo_settings_group' );
-            submit_button( __( 'Instellingen opslaan', 'data-driven-optimizer' ) );
-            ?>
-        </form>
+        <section id="ddo-section-instellingen" class="ddo-admin-section">
+            <h2><?php esc_html_e( 'Instellingen', 'data-driven-optimizer' ); ?></h2>
+            <h3><?php esc_html_e( 'Pluginconfiguratie', 'data-driven-optimizer' ); ?></h3>
+            <form action="options.php" method="post">
+                <?php
+                settings_fields( 'ddo_settings_group' );
+                do_settings_sections( 'ddo_settings_group' );
+                submit_button( __( 'Instellingen opslaan', 'data-driven-optimizer' ) );
+                ?>
+            </form>
+        </section>
 
-        <hr />
+        <section id="ddo-section-scheduler" class="ddo-admin-section">
+            <h2><?php esc_html_e( 'Scheduler', 'data-driven-optimizer' ); ?></h2>
+            <h3><?php esc_html_e( 'Scheduler status', 'data-driven-optimizer' ); ?></h3>
+            <?php ddo_render_scheduler_status_block(); ?>
+        </section>
 
-        <h2><?php esc_html_e( 'Scheduler status', 'data-driven-optimizer' ); ?></h2>
-        <?php ddo_render_scheduler_status_block(); ?>
+        <section id="ddo-section-feedback" class="ddo-admin-section">
+            <h2><?php esc_html_e( 'Feedback inzichten', 'data-driven-optimizer' ); ?></h2>
+            <h3><?php esc_html_e( 'Samenvatting', 'data-driven-optimizer' ); ?></h3>
+            <?php ddo_render_feedback_summary_cards( $feedback_summary ); ?>
+            <h3><?php esc_html_e( 'Eventoverzicht', 'data-driven-optimizer' ); ?></h3>
+            <?php ddo_render_feedback_events_table( $feedback_summary ); ?>
+        </section>
 
-        <hr />
+        <section id="ddo-section-concept" class="ddo-admin-section">
+            <h2><?php esc_html_e( 'Conceptinvoer', 'data-driven-optimizer' ); ?></h2>
+            <h3><?php esc_html_e( 'Concept verwerken', 'data-driven-optimizer' ); ?></h3>
+            <form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" id="ddo-concept-form">
+                <input type="hidden" name="action" value="ddo_submit_concept" />
+                <?php wp_nonce_field( 'ddo_submit_concept', 'ddo_submit_concept_nonce' ); ?>
+                <textarea name="ddo_concept_input" rows="5" class="large-text" required></textarea>
+                <?php submit_button( __( 'Verwerk concept', 'data-driven-optimizer' ), 'secondary', 'submit', false ); ?>
+                <button type="button" class="button" id="ddo-preview-concept"><?php esc_html_e( 'Preview via AJAX', 'data-driven-optimizer' ); ?></button>
+            </form>
 
-        <h2><?php esc_html_e( 'Feedback inzichten', 'data-driven-optimizer' ); ?></h2>
-        <?php ddo_render_feedback_summary_cards( $feedback_summary ); ?>
-        <?php ddo_render_feedback_events_table( $feedback_summary ); ?>
+            <?php if ( is_array( $concept_result ) ) : ?>
+                <h3><?php esc_html_e( 'Laatste resultaat', 'data-driven-optimizer' ); ?></h3>
+                <p><strong><?php esc_html_e( 'Invoer:', 'data-driven-optimizer' ); ?></strong> <?php echo esc_html( $concept_result['input'] ); ?></p>
+                <p><strong><?php esc_html_e( 'Samenvatting:', 'data-driven-optimizer' ); ?></strong> <?php echo esc_html( $concept_result['summary'] ); ?></p>
+            <?php endif; ?>
 
-        <hr />
-
-        <h2><?php esc_html_e( 'Conceptinvoer (admin-only)', 'data-driven-optimizer' ); ?></h2>
-        <form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" id="ddo-concept-form">
-            <input type="hidden" name="action" value="ddo_submit_concept" />
-            <?php wp_nonce_field( 'ddo_submit_concept', 'ddo_submit_concept_nonce' ); ?>
-            <textarea name="ddo_concept_input" rows="5" class="large-text" required></textarea>
-            <?php submit_button( __( 'Verwerk concept', 'data-driven-optimizer' ), 'secondary', 'submit', false ); ?>
-            <button type="button" class="button" id="ddo-preview-concept"><?php esc_html_e( 'Preview via AJAX', 'data-driven-optimizer' ); ?></button>
-        </form>
-
-        <?php if ( is_array( $concept_result ) ) : ?>
-            <h3><?php esc_html_e( 'Laatste resultaat', 'data-driven-optimizer' ); ?></h3>
-            <p><strong><?php esc_html_e( 'Invoer:', 'data-driven-optimizer' ); ?></strong> <?php echo esc_html( $concept_result['input'] ); ?></p>
-            <p><strong><?php esc_html_e( 'Samenvatting:', 'data-driven-optimizer' ); ?></strong> <?php echo esc_html( $concept_result['summary'] ); ?></p>
-        <?php endif; ?>
-
-        <div id="ddo-ajax-preview-response" aria-live="polite"></div>
+            <div id="ddo-ajax-preview-response" aria-live="polite"></div>
+        </section>
     </div>
     <?php
 }
