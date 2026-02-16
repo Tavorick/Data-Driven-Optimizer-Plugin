@@ -103,6 +103,7 @@ function sanitize_key( $value ) {
     $value = strtolower( (string) $value );
     return preg_replace( '/[^a-z0-9_-]/', '', $value );
 }
+function absint( $value ) { return abs( (int) $value ); }
 
 function wp_unslash( $value ) {
     return $value;
