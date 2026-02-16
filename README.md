@@ -11,6 +11,14 @@ Versie: 1.1
 - **Interactiestates**: links, knoppen en tabelrijen hebben hover/focus states met subtiele kleurverschuiving en duidelijke focus-ringen voor toetsenbordnavigatie.
 - **Responsive gedrag**: cards schalen naar één kolom op smallere schermen; tabelcontainers ondersteunen horizontale overflow zodat content leesbaar blijft op mobiele viewports.
 
+## A11y-checklist voor admin UI wijzigingen
+- [ ] Formuliervelden hebben een expliciete `<label for="...">` en contextuele hulptekst via `aria-describedby` waar relevant.
+- [ ] Visuele statusindicatoren (zoals pills/badges) communiceren status ook via screenreader-tekst.
+- [ ] Kleurcontrast van statuspills, notices en live-feedback voldoet minimaal aan WCAG AA voor normale tekst.
+- [ ] Alle interactieve elementen zijn met toetsenbord bereikbaar en hebben een duidelijke `:focus-visible` staat.
+- [ ] Dynamische statusberichten (zoals AJAX-resultaten) gebruiken passende live-region attributen (`role="status"`, `aria-live`).
+- [ ] Wijzigingen zijn handmatig getest in de admin UI op toetsenbordnavigatie (Tab/Shift+Tab/Enter/Spatie).
+
 
 ## Huidige implementatiestatus (codebase)
 - ✅ Basis plugin-bootstrap, activatie/deactivatie en module-loading.

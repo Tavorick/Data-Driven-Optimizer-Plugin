@@ -137,9 +137,11 @@ function ddo_render_admin_page() {
             <form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" id="ddo-concept-form">
                 <input type="hidden" name="action" value="ddo_submit_concept" />
                 <?php wp_nonce_field( 'ddo_submit_concept', 'ddo_submit_concept_nonce' ); ?>
-                <textarea name="ddo_concept_input" rows="5" class="large-text" required></textarea>
+                <label for="ddo-concept-input"><?php esc_html_e( 'Concepttekst', 'data-driven-optimizer' ); ?></label>
+                <textarea id="ddo-concept-input" name="ddo_concept_input" rows="5" class="large-text" aria-describedby="ddo-concept-input-help" required></textarea>
+                <p id="ddo-concept-input-help" class="description"><?php esc_html_e( 'Voer de ruwe concepttekst in. We gebruiken deze voor verwerking en voor de AJAX-preview.', 'data-driven-optimizer' ); ?></p>
                 <?php submit_button( __( 'Verwerk concept', 'data-driven-optimizer' ), 'secondary', 'submit', false ); ?>
-                <button type="button" class="button" id="ddo-preview-concept" aria-controls="ddo-ajax-preview-response"><?php esc_html_e( 'Preview via AJAX', 'data-driven-optimizer' ); ?></button>
+                <button type="button" class="button" id="ddo-preview-concept" aria-controls="ddo-ajax-preview-response" aria-describedby="ddo-concept-input-help"><?php esc_html_e( 'Preview via AJAX', 'data-driven-optimizer' ); ?></button>
             </form>
 
             <?php if ( is_array( $concept_result ) ) : ?>
@@ -341,7 +343,20 @@ function ddo_render_scheduler_status_block() {
                     <td><?php echo $last_start > 0 ? esc_html( wp_date( 'Y-m-d H:i:s', $last_start ) ) : esc_html__( 'Nooit', 'data-driven-optimizer' ); ?></td>
                     <td><?php echo $last_success > 0 ? esc_html( wp_date( 'Y-m-d H:i:s', $last_success ) ) : esc_html__( 'Nooit', 'data-driven-optimizer' ); ?></td>
                     <td><?php echo '' !== $last_error_message ? esc_html( $last_error_message ) : '&mdash;'; ?></td>
-                    <td><span class="ddo-scheduler-status-pill <?php echo esc_attr( $is_stale ? 'is-stale' : 'is-ok' ); ?>"><?php echo esc_html( $status_label ); ?></span></td>
+                    <td>
+                        <span class="ddo-scheduler-status-pill <?php echo esc_attr( $is_stale ? 'is-stale' : 'is-ok' ); ?>">
+                            <span aria-hidden="true"><?php echo esc_html( $status_label ); ?></span>
+                            <span class="screen-reader-text">
+                                <?php
+                                printf(
+                                    /* translators: %s: statuslabel voor scheduler job. */
+                                    esc_html__( 'Scheduler status: %s', 'data-driven-optimizer' ),
+                                    esc_html( $status_label )
+                                );
+                                ?>
+                            </span>
+                        </span>
+                    </td>
                     <td>
                         <form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" class="ddo-scheduler-run-form">
                             <input type="hidden" name="action" value="ddo_run_scheduler_job" />
