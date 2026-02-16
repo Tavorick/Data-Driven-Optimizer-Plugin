@@ -81,7 +81,8 @@ function ddo_render_admin_page() {
 
     $enabled          = (bool) get_option( 'ddo_enabled', true );
     $concept_result   = get_transient( 'ddo_concept_result_' . get_current_user_id() );
-    $feedback_summary = ddo_get_feedback_summary();
+    $feedback_filters = ddo_get_feedback_filters_from_request();
+    $feedback_summary = ddo_get_feedback_summary( $feedback_filters );
 
     if ( false !== $concept_result ) {
         delete_transient( 'ddo_concept_result_' . get_current_user_id() );
@@ -125,6 +126,7 @@ function ddo_render_admin_page() {
 
         <section id="ddo-section-feedback" class="ddo-admin-section">
             <h2><?php esc_html_e( 'Feedback inzichten', 'data-driven-optimizer' ); ?></h2>
+            <?php ddo_render_feedback_filters_form( $feedback_summary ); ?>
             <h3><?php esc_html_e( 'Samenvatting', 'data-driven-optimizer' ); ?></h3>
             <?php ddo_render_feedback_summary_cards( $feedback_summary ); ?>
             <h3><?php esc_html_e( 'Eventoverzicht', 'data-driven-optimizer' ); ?></h3>
@@ -157,6 +159,51 @@ function ddo_render_admin_page() {
 }
 
 /**
+ * Lees en normaliseer feedbackfilters uit request.
+ *
+ * @return array
+ */
+function ddo_get_feedback_filters_from_request() {
+    $days = isset( $_GET['ddo_days'] ) ? (int) wp_unslash( $_GET['ddo_days'] ) : 30; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+    $sort = isset( $_GET['ddo_sort'] ) ? sanitize_key( wp_unslash( $_GET['ddo_sort'] ) ) : 'count_desc'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+    return ddo_normalize_feedback_filters(
+        array(
+            'days' => $days,
+            'sort' => $sort,
+        )
+    );
+}
+
+/**
+ * Render filterformulier voor feedbackinzichten.
+ *
+ * @param array $summary Feedbacksamenvatting met filtermeta.
+ */
+function ddo_render_feedback_filters_form( $summary ) {
+    $filters = isset( $summary['filters'] ) && is_array( $summary['filters'] ) ? $summary['filters'] : ddo_normalize_feedback_filters();
+    ?>
+    <form method="get" class="ddo-feedback-filters">
+        <input type="hidden" name="page" value="ddo-dashboard" />
+        <label for="ddo-days-filter"><?php esc_html_e( 'Periode', 'data-driven-optimizer' ); ?></label>
+        <select id="ddo-days-filter" name="ddo_days">
+            <option value="7" <?php selected( 7, (int) $filters['days'] ); ?>><?php esc_html_e( 'Laatste 7 dagen', 'data-driven-optimizer' ); ?></option>
+            <option value="30" <?php selected( 30, (int) $filters['days'] ); ?>><?php esc_html_e( 'Laatste 30 dagen', 'data-driven-optimizer' ); ?></option>
+            <option value="0" <?php selected( 0, (int) $filters['days'] ); ?>><?php esc_html_e( 'Alles', 'data-driven-optimizer' ); ?></option>
+        </select>
+
+        <label for="ddo-sort-filter"><?php esc_html_e( 'Sorteer events op', 'data-driven-optimizer' ); ?></label>
+        <select id="ddo-sort-filter" name="ddo_sort">
+            <option value="count_desc" <?php selected( 'count_desc', $filters['sort'] ); ?>><?php esc_html_e( 'Aantal (hoog naar laag)', 'data-driven-optimizer' ); ?></option>
+            <option value="score_desc" <?php selected( 'score_desc', $filters['sort'] ); ?>><?php esc_html_e( 'Score (hoog naar laag)', 'data-driven-optimizer' ); ?></option>
+        </select>
+
+        <?php submit_button( __( 'Toepassen', 'data-driven-optimizer' ), 'secondary', '', false ); ?>
+    </form>
+    <?php
+}
+
+/**
  * Render compacte samenvattingskaarten.
  *
  * @param array $summary Feedbacksamenvatting.
@@ -164,6 +211,14 @@ function ddo_render_admin_page() {
 function ddo_render_feedback_summary_cards( $summary ) {
     $total_count   = isset( $summary['totals']['count'] ) ? (int) $summary['totals']['count'] : 0;
     $average_score = isset( $summary['totals']['averageScore'] ) ? (float) $summary['totals']['averageScore'] : 0;
+    $highest_score = isset( $summary['totals']['highestScore'] ) ? (float) $summary['totals']['highestScore'] : 0;
+    $lowest_score  = isset( $summary['totals']['lowestScore'] ) ? (float) $summary['totals']['lowestScore'] : 0;
+    $unscored      = isset( $summary['totals']['unscored'] ) ? (int) $summary['totals']['unscored'] : 0;
+
+    if ( 0 === $total_count ) {
+        echo '<p>' . esc_html__( 'Geen data in gekozen periode.', 'data-driven-optimizer' ) . '</p>';
+        return;
+    }
     ?>
     <div class="ddo-feedback-cards">
         <div class="ddo-feedback-card">
@@ -173,6 +228,18 @@ function ddo_render_feedback_summary_cards( $summary ) {
         <div class="ddo-feedback-card">
             <h3><?php esc_html_e( 'Gemiddelde score', 'data-driven-optimizer' ); ?></h3>
             <p><?php echo esc_html( number_format_i18n( $average_score, 2 ) ); ?></p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Hoogste eventscore', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( $highest_score, 2 ) ); ?></p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Laagste eventscore', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( $lowest_score, 2 ) ); ?></p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Events zonder score', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( $unscored ) ); ?></p>
         </div>
     </div>
     <?php
@@ -187,7 +254,7 @@ function ddo_render_feedback_events_table( $summary ) {
     $events = isset( $summary['events'] ) && is_array( $summary['events'] ) ? $summary['events'] : array();
 
     if ( empty( $events ) ) {
-        echo '<p>' . esc_html__( 'Nog geen feedbackevents opgeslagen.', 'data-driven-optimizer' ) . '</p>';
+        echo '<p>' . esc_html__( 'Geen data in gekozen periode.', 'data-driven-optimizer' ) . '</p>';
         return;
     }
     ?>
