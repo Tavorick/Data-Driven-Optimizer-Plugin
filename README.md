@@ -56,6 +56,21 @@ Validatiefout response (`400/422`):
 }
 ```
 
+
+## Lokale tests draaien (kritieke paden)
+
+```bash
+composer install
+vendor/bin/phpunit --testsuite "DDO Plugin Tests"
+```
+
+Deze testset dekt:
+- settings sanitization (`ddo_sanitize_enabled`, `ddo_sanitize_api_key`)
+- REST route registratie + permission callback
+- feedback payload prep + score clamping
+- cron event registratie + clearing
+- expliciete testdata-isolatie voor `ddo_feedback`
+
 ## Migratie van API-key opslag (v1.1+)
 - `ddo_api_key_primary` en `ddo_api_key_secondary` worden bij opslaan versleuteld opgeslagen.
 - Bestaande plaintext API-keys worden automatisch gemigreerd:
