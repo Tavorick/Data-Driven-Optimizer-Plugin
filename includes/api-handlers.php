@@ -486,7 +486,8 @@ function ddo_get_api_data_fetch_service() {
  */
 function ddo_default_api_data_fetch_service() {
     return array(
-        'records_fetched' => 0,
+        'processed_count' => 0,
+        'errors_count'    => 0,
         'source'          => 'default-api-client',
     );
 }
@@ -502,20 +503,24 @@ function ddo_process_api_data_fetch() {
     $payload    = call_user_func( $service );
     $payload    = is_array( $payload ) ? $payload : array();
 
-    $records_processed = isset( $payload['records_fetched'] ) ? (int) $payload['records_fetched'] : 0;
-    $error_code        = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+    $processed_count = isset( $payload['processed_count'] )
+        ? (int) $payload['processed_count']
+        : ( isset( $payload['records_fetched'] ) ? (int) $payload['records_fetched'] : 0 );
+    $error_code      = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+    $errors_count    = isset( $payload['errors_count'] )
+        ? (int) $payload['errors_count']
+        : ( '' !== $error_code ? 1 : 0 );
 
     $result = array(
-        'job'               => 'ddo_hourly_fetch',
-        'service'           => is_string( $service ) ? $service : 'custom-api-data-fetch-service',
-        'records_processed' => max( 0, $records_processed ),
-        'duration_ms'       => (int) round( ( microtime( true ) - $started_at ) * 1000 ),
-        'error_code'        => $error_code,
+        'job'             => 'ddo_hourly_fetch',
+        'service'         => is_string( $service ) ? $service : 'custom-api-data-fetch-service',
+        'processed_count' => max( 0, $processed_count ),
+        'errors_count'    => max( 0, $errors_count ),
+        'duration_ms'     => (int) round( ( microtime( true ) - $started_at ) * 1000 ),
+        'error_code'      => $error_code,
     );
 
-    if ( '' !== $error_code ) {
-        ddo_log_scheduler_event( 'ddo_hourly_fetch', 'fetch-failed', 'error', $result );
-
+    if ( $result['errors_count'] > 0 ) {
         throw new RuntimeException( 'API data fetch failed.', 0 );
     }
 
