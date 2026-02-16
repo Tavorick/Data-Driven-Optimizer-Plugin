@@ -432,6 +432,22 @@ function ddo_get_scheduler_stale_cause_text( $last_success, $seconds_since_ok, $
 }
 
 /**
+ * Formatteer run-duur altijd in seconden voor consistente weergave.
+ *
+ * @param int $duration_seconds Duur in seconden.
+ * @return string
+ */
+function ddo_format_scheduler_duration_seconds( $duration_seconds ) {
+    $duration_seconds = max( 0, (int) $duration_seconds );
+
+    return sprintf(
+        /* translators: %s: duur in seconden. */
+        __( '%s sec', 'data-driven-optimizer' ),
+        number_format_i18n( $duration_seconds )
+    );
+}
+
+/**
  * Render scheduler observability tabel met run-now acties.
  */
 function ddo_render_scheduler_status_block() {
@@ -518,7 +534,7 @@ function ddo_render_scheduler_status_block() {
                     <td><code><?php echo esc_html( $item['job_name'] ); ?></code></td>
                     <td><?php echo $item['last_start'] > 0 ? esc_html( wp_date( 'Y-m-d H:i:s', $item['last_start'] ) ) : esc_html__( 'Nooit', 'data-driven-optimizer' ); ?></td>
                     <td><?php echo $item['last_success'] > 0 ? esc_html( wp_date( 'Y-m-d H:i:s', $item['last_success'] ) ) : esc_html__( 'Nooit', 'data-driven-optimizer' ); ?></td>
-                    <td><?php echo $item['last_duration'] > 0 ? esc_html( human_time_diff( 0, $item['last_duration'] ) ) : '&mdash;'; ?></td>
+                    <td><?php echo $item['last_duration'] > 0 ? esc_html( ddo_format_scheduler_duration_seconds( $item['last_duration'] ) ) : '&mdash;'; ?></td>
                     <td><?php echo $item['next_run'] ? esc_html( wp_date( 'Y-m-d H:i:s', (int) $item['next_run'] ) ) : esc_html__( 'Niet gepland', 'data-driven-optimizer' ); ?></td>
                     <td><?php echo '' !== $item['last_error_message'] ? esc_html( $item['last_error_message'] ) : '&mdash;'; ?></td>
                     <td>

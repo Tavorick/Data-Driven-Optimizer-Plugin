@@ -87,6 +87,13 @@ class RenderOutputSnapshotTest extends TestCase {
         $this->assertStringContainsString( '<td>8.50</td>', $filledOutput );
     }
 
+    public function test_format_scheduler_duration_seconds_uses_seconds_label(): void {
+        $this->assertSame( '0 sec', ddo_format_scheduler_duration_seconds( 0 ) );
+        $this->assertSame( '12 sec', ddo_format_scheduler_duration_seconds( 12 ) );
+        $this->assertSame( '1,234 sec', ddo_format_scheduler_duration_seconds( 1234 ) );
+    }
+
+
     private function normalizeHtml( string $html ): string {
         $html = preg_replace( '/>\s+</', '><', trim( $html ) );
 
