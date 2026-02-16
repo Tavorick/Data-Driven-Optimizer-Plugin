@@ -63,7 +63,8 @@ function ddo_get_ml_feedback_retrain_service() {
  */
 function ddo_default_ml_feedback_retrain_service() {
     return array(
-        'trained_samples' => 0,
+        'processed_count' => 0,
+        'errors_count'    => 0,
         'model_version'   => 'baseline',
     );
 }
@@ -79,24 +80,26 @@ function ddo_process_ml_feedback_retrain() {
     $payload    = call_user_func( $service );
     $payload    = is_array( $payload ) ? $payload : array();
 
-    $records_processed = isset( $payload['trained_samples'] ) ? (int) $payload['trained_samples'] : 0;
-    $error_code        = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+    $processed_count = isset( $payload['processed_count'] )
+        ? (int) $payload['processed_count']
+        : ( isset( $payload['trained_samples'] ) ? (int) $payload['trained_samples'] : 0 );
+    $error_code      = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+    $errors_count    = isset( $payload['errors_count'] )
+        ? (int) $payload['errors_count']
+        : ( '' !== $error_code ? 1 : 0 );
 
     $result = array(
-        'job'               => 'ddo_weekly_retrain',
-        'service'           => is_string( $service ) ? $service : 'custom-ml-feedback-retrain-service',
-        'records_processed' => max( 0, $records_processed ),
-        'duration_ms'       => (int) round( ( microtime( true ) - $started_at ) * 1000 ),
-        'error_code'        => $error_code,
+        'job'             => 'ddo_weekly_retrain',
+        'service'         => is_string( $service ) ? $service : 'custom-ml-feedback-retrain-service',
+        'processed_count' => max( 0, $processed_count ),
+        'errors_count'    => max( 0, $errors_count ),
+        'duration_ms'     => (int) round( ( microtime( true ) - $started_at ) * 1000 ),
+        'error_code'      => $error_code,
     );
 
-    if ( '' !== $error_code ) {
-        ddo_log_scheduler_event( 'ddo_weekly_retrain', 'retrain-failed', 'error', $result );
-
+    if ( $result['errors_count'] > 0 ) {
         throw new RuntimeException( 'ML feedback retrain failed.', 0 );
     }
-
-    ddo_log_scheduler_event( 'ddo_weekly_retrain', 'retrain-complete', 'info', $result );
 
     return $result;
 }

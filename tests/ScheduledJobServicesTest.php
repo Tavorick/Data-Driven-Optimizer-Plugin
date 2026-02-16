@@ -17,7 +17,7 @@ class ScheduledJobServicesTest extends TestCase {
         ddo_set_api_data_fetch_service(
             function () {
                 return array(
-                    'records_fetched' => 17,
+                    'processed_count' => 17,
                 );
             }
         );
@@ -26,7 +26,8 @@ class ScheduledJobServicesTest extends TestCase {
 
         $metadata = ddo_get_scheduler_job_metadata();
 
-        $this->assertSame( 17, $metadata['ddo_hourly_fetch']['last_result']['records_processed'] );
+        $this->assertSame( 17, $metadata['ddo_hourly_fetch']['last_result']['processed_count'] );
+        $this->assertSame( 0, $metadata['ddo_hourly_fetch']['last_result']['errors_count'] );
         $this->assertSame( '', $metadata['ddo_hourly_fetch']['last_result']['error_code'] );
         $this->assertArrayHasKey( 'duration_ms', $metadata['ddo_hourly_fetch']['last_result'] );
         $this->assertArrayHasKey( 'last_success', $metadata['ddo_hourly_fetch'] );
@@ -37,7 +38,8 @@ class ScheduledJobServicesTest extends TestCase {
         ddo_set_api_data_fetch_service(
             function () {
                 return array(
-                    'records_fetched' => 9,
+                    'processed_count' => 9,
+                    'errors_count'    => 2,
                     'error_code'      => 'API_RATE_LIMIT',
                 );
             }
@@ -56,7 +58,7 @@ class ScheduledJobServicesTest extends TestCase {
         ddo_set_ml_feedback_retrain_service(
             function () {
                 return array(
-                    'trained_samples' => 33,
+                    'processed_count' => 33,
                 );
             }
         );
@@ -65,7 +67,8 @@ class ScheduledJobServicesTest extends TestCase {
 
         $metadata = ddo_get_scheduler_job_metadata();
 
-        $this->assertSame( 33, $metadata['ddo_weekly_retrain']['last_result']['records_processed'] );
+        $this->assertSame( 33, $metadata['ddo_weekly_retrain']['last_result']['processed_count'] );
+        $this->assertSame( 0, $metadata['ddo_weekly_retrain']['last_result']['errors_count'] );
         $this->assertSame( '', $metadata['ddo_weekly_retrain']['last_result']['error_code'] );
         $this->assertArrayHasKey( 'duration_ms', $metadata['ddo_weekly_retrain']['last_result'] );
         $this->assertArrayHasKey( 'last_success', $metadata['ddo_weekly_retrain'] );
@@ -75,7 +78,8 @@ class ScheduledJobServicesTest extends TestCase {
         ddo_set_ml_feedback_retrain_service(
             function () {
                 return array(
-                    'trained_samples' => 33,
+                    'processed_count' => 33,
+                    'errors_count'    => 1,
                     'error_code'      => 'TRAINING_TIMEOUT',
                 );
             }
@@ -94,7 +98,7 @@ class ScheduledJobServicesTest extends TestCase {
         ddo_set_code_introspection_service(
             function () {
                 return array(
-                    'files_scanned' => 41,
+                    'processed_count' => 41,
                 );
             }
         );
@@ -103,7 +107,8 @@ class ScheduledJobServicesTest extends TestCase {
 
         $metadata = ddo_get_scheduler_job_metadata();
 
-        $this->assertSame( 41, $metadata['ddo_daily_introspect']['last_result']['records_processed'] );
+        $this->assertSame( 41, $metadata['ddo_daily_introspect']['last_result']['processed_count'] );
+        $this->assertSame( 0, $metadata['ddo_daily_introspect']['last_result']['errors_count'] );
         $this->assertSame( '', $metadata['ddo_daily_introspect']['last_result']['error_code'] );
         $this->assertArrayHasKey( 'duration_ms', $metadata['ddo_daily_introspect']['last_result'] );
         $this->assertArrayHasKey( 'last_success', $metadata['ddo_daily_introspect'] );
@@ -114,8 +119,9 @@ class ScheduledJobServicesTest extends TestCase {
         ddo_set_code_introspection_service(
             function () {
                 return array(
-                    'files_scanned' => 18,
-                    'error_code'    => 'ANALYSIS_PARSER_FAILURE',
+                    'processed_count' => 18,
+                    'errors_count'    => 1,
+                    'error_code'      => 'ANALYSIS_PARSER_FAILURE',
                 );
             }
         );
@@ -136,5 +142,104 @@ class ScheduledJobServicesTest extends TestCase {
         $this->assertStringNotContainsString( "do_action( 'ddo_api_data_fetch' )", $api_handlers );
         $this->assertStringNotContainsString( "do_action( 'ddo_ml_feedback_retrain' )", $ml_feedback );
         $this->assertStringNotContainsString( "do_action( 'ddo_code_introspection' )", $introspect );
+    }
+
+    public function test_process_api_data_fetch_returns_structured_result(): void {
+        ddo_set_api_data_fetch_service(
+            function () {
+                return array(
+                    'processed_count' => 12,
+                    'errors_count'    => 0,
+                );
+            }
+        );
+
+        $result = ddo_process_api_data_fetch();
+
+        $this->assertSame( 12, $result['processed_count'] );
+        $this->assertSame( 0, $result['errors_count'] );
+        $this->assertArrayHasKey( 'duration_ms', $result );
+    }
+
+    public function test_process_api_data_fetch_bubbles_error_exception(): void {
+        ddo_set_api_data_fetch_service(
+            function () {
+                return array(
+                    'processed_count' => 12,
+                    'errors_count'    => 1,
+                );
+            }
+        );
+
+        $this->expectException( RuntimeException::class );
+        $this->expectExceptionMessage( 'API data fetch failed.' );
+
+        ddo_process_api_data_fetch();
+    }
+
+    public function test_process_ml_feedback_retrain_returns_structured_result(): void {
+        ddo_set_ml_feedback_retrain_service(
+            function () {
+                return array(
+                    'processed_count' => 7,
+                    'errors_count'    => 0,
+                );
+            }
+        );
+
+        $result = ddo_process_ml_feedback_retrain();
+
+        $this->assertSame( 7, $result['processed_count'] );
+        $this->assertSame( 0, $result['errors_count'] );
+        $this->assertArrayHasKey( 'duration_ms', $result );
+    }
+
+    public function test_process_ml_feedback_retrain_bubbles_error_exception(): void {
+        ddo_set_ml_feedback_retrain_service(
+            function () {
+                return array(
+                    'processed_count' => 7,
+                    'errors_count'    => 1,
+                );
+            }
+        );
+
+        $this->expectException( RuntimeException::class );
+        $this->expectExceptionMessage( 'ML feedback retrain failed.' );
+
+        ddo_process_ml_feedback_retrain();
+    }
+
+    public function test_process_code_introspection_returns_structured_result(): void {
+        ddo_set_code_introspection_service(
+            function () {
+                return array(
+                    'processed_count' => 21,
+                    'errors_count'    => 0,
+                );
+            }
+        );
+
+        $result = ddo_process_code_introspection();
+
+        $this->assertSame( 21, $result['processed_count'] );
+        $this->assertSame( 0, $result['errors_count'] );
+        $this->assertArrayHasKey( 'duration_ms', $result );
+    }
+
+    public function test_process_code_introspection_bubbles_error_exception(): void {
+        ddo_set_code_introspection_service(
+            function () {
+                return array(
+                    'processed_count' => 21,
+                    'errors_count'    => 1,
+                );
+            }
+        );
+
+        $this->expectException( RuntimeException::class );
+        $this->expectExceptionMessage( 'Code introspection failed.' );
+
+        ddo_process_code_introspection();
     }
 }
