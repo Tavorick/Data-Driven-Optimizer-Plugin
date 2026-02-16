@@ -3,9 +3,39 @@
     padding: 24px;
     border: 1px solid #dcdcde;
     border-radius: 4px;
-    max-width: 720px;
+    max-width: 900px;
 }
 
 .ddo-admin-wrap p {
     font-size: 14px;
+}
+
+.ddo-feedback-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 0 0 16px;
+}
+
+.ddo-feedback-card {
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    padding: 12px;
+    background: #f8f9fa;
+}
+
+.ddo-feedback-card h3 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #3c434a;
+}
+
+.ddo-feedback-card p {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.ddo-feedback-table {
+    margin: 0 0 20px;
 }

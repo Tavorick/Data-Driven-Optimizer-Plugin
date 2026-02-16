@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'DDO_SCHEMA_VERSION', '1.0.0' );
+define( 'DDO_SCHEMA_VERSION', '1.1.0' );
 
 /**
  * Create or update all plugin tables.
@@ -90,6 +90,9 @@ function ddo_install_database_schema() {
         feedback_date DATE NOT NULL,
         feedback_text TEXT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'open',
+        event_name VARCHAR(100) NOT NULL DEFAULT '',
+        score TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+        client_hash VARCHAR(255) NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY  (id),
@@ -98,6 +101,8 @@ function ddo_install_database_schema() {
         KEY idx_campaign_id (campaign_id),
         KEY idx_ad_id (ad_id),
         KEY idx_status (status),
+        KEY idx_event_name (event_name),
+        KEY idx_score (score),
         KEY idx_campaign_date (campaign_id, feedback_date),
         KEY idx_ad_date (ad_id, feedback_date)
     ) {$charset_collate};";
