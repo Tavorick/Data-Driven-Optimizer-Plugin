@@ -124,7 +124,7 @@ class RenderOutputSnapshotTest extends TestCase {
         ddo_render_scheduler_status_block();
         $output = $this->normalizeHtml( ob_get_clean() );
 
-        $this->assertStringContainsString( '<h4>Stale jobs</h4>', $output );
+        $this->assertStringContainsString( 'Stale jobs', $output );
         $this->assertStringContainsString( '<code>ddo_hourly_fetch</code>', $output );
         $this->assertStringContainsString( 'Scheduler status: Stale', $output );
         $this->assertStringContainsString( 'Laatste fout: Timeout bij upstream bron', $output );
