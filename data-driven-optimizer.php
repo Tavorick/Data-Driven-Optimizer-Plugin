@@ -21,11 +21,14 @@ define( 'DDO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 require_once DDO_PLUGIN_DIR . 'includes/settings.php';
 require_once DDO_PLUGIN_DIR . 'includes/admin-dashboard.php';
 require_once DDO_PLUGIN_DIR . 'includes/api-handlers.php';
+require_once DDO_PLUGIN_DIR . 'includes/db-schema.php';
 
 /**
  * Basisinitialisatie bij activatie.
  */
 function ddo_activate_plugin() {
+    ddo_install_database_schema();
+
     if ( false === get_option( 'ddo_options' ) ) {
         add_option(
             'ddo_options',
@@ -49,6 +52,7 @@ register_deactivation_hook( DDO_PLUGIN_FILE, 'ddo_deactivate_plugin' );
  * Start de plugin-onderdelen.
  */
 function ddo_init_plugin() {
+    ddo_maybe_upgrade_database_schema();
     ddo_register_settings();
     ddo_register_admin_menu();
     ddo_register_api_routes();
