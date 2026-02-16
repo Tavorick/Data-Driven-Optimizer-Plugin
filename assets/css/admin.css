@@ -1,13 +1,30 @@
+:root {
+    --ddo-card-background: #fff;
+    --ddo-card-border: 1px solid #dcdcde;
+    --ddo-card-radius: 8px;
+    --ddo-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+
+    --ddo-space-8: 8px;
+    --ddo-space-12: 12px;
+    --ddo-space-16: 16px;
+    --ddo-space-24: 24px;
+
+    --ddo-type-heading: 600 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --ddo-type-body: 400 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --ddo-type-meta: 500 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 .ddo-admin-wrap {
-    background: #fff;
-    padding: 24px;
-    border: 1px solid #dcdcde;
-    border-radius: 4px;
+    background: var(--ddo-card-background);
+    padding: var(--ddo-space-24);
+    border: var(--ddo-card-border);
+    border-radius: var(--ddo-card-radius);
+    box-shadow: var(--ddo-card-shadow);
     max-width: 900px;
 }
 
 .ddo-admin-wrap p {
-    font-size: 14px;
+    font: var(--ddo-type-body);
 }
 
 .ddo-section-nav {
@@ -67,11 +84,15 @@
 
 .ddo-admin-section h2 {
     margin: 0 0 14px;
+    font: var(--ddo-type-heading);
 }
 
 .ddo-admin-section h3 {
     margin: 0 0 12px;
-    font-size: 15px;
+    font: var(--ddo-type-meta);
+    font-size: 13px;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
 }
 
 .ddo-admin-section:target {
@@ -91,21 +112,23 @@
 .ddo-feedback-cards {
     display: grid;
     grid-template-columns: repeat(2, minmax(180px, 1fr));
-    gap: 12px;
-    margin: 0 0 16px;
+    gap: var(--ddo-space-12);
+    margin: 0 0 var(--ddo-space-16);
 }
 
 .ddo-feedback-card {
-    border: 1px solid #dcdcde;
-    border-radius: 4px;
-    padding: 12px;
-    background: #f8f9fa;
+    border: var(--ddo-card-border);
+    border-radius: var(--ddo-card-radius);
+    padding: var(--ddo-space-12);
+    background: var(--ddo-card-background);
+    box-shadow: var(--ddo-card-shadow);
 }
 
 .ddo-feedback-card h3 {
-    margin: 0 0 8px;
-    font-size: 13px;
+    margin: 0 0 var(--ddo-space-8);
+    font: var(--ddo-type-meta);
     color: #3c434a;
+    text-transform: uppercase;
 }
 
 .ddo-feedback-card p {
@@ -115,11 +138,39 @@
 }
 
 .ddo-feedback-table {
-    margin: 0 0 20px;
+    margin: 0 0 var(--ddo-space-24);
+    border: var(--ddo-card-border);
+    border-radius: var(--ddo-card-radius);
+    box-shadow: var(--ddo-card-shadow);
+    overflow-x: auto;
+    background: var(--ddo-card-background);
 }
 
 .ddo-scheduler-table {
-    margin: 0 0 20px;
+    margin: 0 0 var(--ddo-space-24);
+    border: var(--ddo-card-border);
+    border-radius: var(--ddo-card-radius);
+    box-shadow: var(--ddo-card-shadow);
+    overflow-x: auto;
+    background: var(--ddo-card-background);
+}
+
+.ddo-feedback-table table,
+.ddo-scheduler-table table {
+    margin: 0;
+    min-width: 680px;
+}
+
+.ddo-feedback-table tbody tr,
+.ddo-scheduler-table tbody tr {
+    transition: background-color .15s ease;
+}
+
+.ddo-feedback-table tbody tr:hover,
+.ddo-feedback-table tbody tr:focus-within,
+.ddo-scheduler-table tbody tr:hover,
+.ddo-scheduler-table tbody tr:focus-within {
+    background: #f0f6fc;
 }
 
 .ddo-scheduler-row-stale {
@@ -148,6 +199,32 @@
     margin: 0;
 }
 
+.ddo-admin-wrap a {
+    transition: color .15s ease;
+}
+
+.ddo-admin-wrap a:hover,
+.ddo-admin-wrap a:focus {
+    color: #135e96;
+}
+
+.ddo-admin-wrap a:focus-visible,
+.ddo-admin-wrap .button:focus-visible,
+.ddo-feedback-table tbody tr:focus-within,
+.ddo-scheduler-table tbody tr:focus-within {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.ddo-admin-wrap .button {
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.ddo-admin-wrap .button:hover,
+.ddo-admin-wrap .button:focus {
+    filter: brightness(0.97);
+}
+
 @media (max-width: 782px) {
     .ddo-section-nav {
         position: static;
@@ -158,5 +235,25 @@
 
     .ddo-feedback-cards {
         grid-template-columns: 1fr;
+    }
+
+    .ddo-admin-wrap {
+        padding: var(--ddo-space-16);
+    }
+
+    .ddo-feedback-table table,
+    .ddo-scheduler-table table {
+        min-width: 560px;
+    }
+}
+
+@media (max-width: 600px) {
+    .ddo-feedback-card {
+        padding: var(--ddo-space-8);
+    }
+
+    .ddo-feedback-table,
+    .ddo-scheduler-table {
+        margin-bottom: var(--ddo-space-16);
     }
 }

@@ -5,6 +5,13 @@ Versie: 1.1
 
 1. Executive Summary
 
+## Admin UI conventions
+- **Design tokens**: admin-styling gebruikt herbruikbare CSS-variabelen voor card-oppervlak (achtergrond, border, radius, shadow), spacing (`8/12/16/24`) en typografie (`heading/body/meta`).
+- **Consistente componenttaal**: `.ddo-admin-wrap`, cards en tabelcontainers delen dezelfde card-surface zodat secties visueel één geheel vormen.
+- **Interactiestates**: links, knoppen en tabelrijen hebben hover/focus states met subtiele kleurverschuiving en duidelijke focus-ringen voor toetsenbordnavigatie.
+- **Responsive gedrag**: cards schalen naar één kolom op smallere schermen; tabelcontainers ondersteunen horizontale overflow zodat content leesbaar blijft op mobiele viewports.
+
+
 ## Huidige implementatiestatus (codebase)
 - ✅ Basis plugin-bootstrap, activatie/deactivatie en module-loading.
 - ✅ Settings API met losse opties (`ddo_enabled`, primaire/secundaire API-key).
