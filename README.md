@@ -29,6 +29,9 @@ Gebruik deze sectie om zichtbare admin-UI wijzigingen traceerbaar vast te leggen
 
 | Datum | Onderdeel | Wijziging | Impact voor gebruiker |
 |---|---|---|---|
+| 2026-02-17 | Releasebeheer | Pluginversie en constante verhoogd naar 1.2.5 en release-check compatibiliteit hersteld met CHANGELOG-entry. | CI/releasevalidatie faalt niet meer op ontbrekende changelogversie. |
+| 2026-02-17 | Releasebeheer | Pluginversie en constante verhoogd naar 1.2.4 en release-changelog aangevuld voor betere traceerbaarheid. | Duidelijke releasehistorie en consistente versieadministratie per afgeronde taak. |
+| 2026-02-17 | Releasebeheer | Pluginversie en constante verhoogd naar 1.2.3 als afgeronde taak-bump. | Versiebeheer blijft synchroon en opleveringen zijn beter traceerbaar. |
 | 2026-02-16 | QA & documentatie | Handmatige testmatrix toegevoegd, UI Definition of Done aangescherpt en render-output checks in tests uitgebreid. | Snellere regressiecontrole en duidelijkere acceptatiecriteria voor UI-tickets. |
 
 ## Admin UI conventions
@@ -344,6 +347,24 @@ Gebruik dit formaat voor elke release:
 - Migratie-instructies:
   - ...
 ```
+
+### [1.2.5] - 2026-02-17
+- Type: **patch**
+- Breaking: **nee**
+- Wijzigingen:
+  - Plugin header `Version` en `DDO_PLUGIN_VERSION` verhoogd naar `1.2.5`.
+  - Releasevalidatie hersteld door compatibele `CHANGELOG.md`-entry voor de actuele pluginversie toe te voegen.
+- Migratie-instructies:
+  - Geen.
+
+### [1.2.4] - 2026-02-17
+- Type: **patch**
+- Breaking: **nee**
+- Wijzigingen:
+  - Plugin header `Version` en `DDO_PLUGIN_VERSION` verhoogd naar `1.2.4`.
+  - README changelog uitgebreid met taakgerichte release-notitie voor versiebeheer.
+- Migratie-instructies:
+  - Geen.
 
 ### [1.3.0] - 2026-02-16
 - Type: **major**
