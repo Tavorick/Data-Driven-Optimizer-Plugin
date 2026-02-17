@@ -57,6 +57,22 @@ class WP_Error {
     public function get_error_message() {
         return $this->message;
     }
+
+    public function get_error_data( $code = '' ) {
+        if ( '' !== (string) $code && (string) $code !== (string) $this->code ) {
+            return null;
+        }
+
+        return $this->data;
+    }
+
+    public function add_data( $data, $code = '' ) {
+        if ( '' !== (string) $code ) {
+            $this->code = (string) $code;
+        }
+
+        $this->data = $data;
+    }
 }
 
 function is_wp_error( $value ) {
@@ -86,6 +102,15 @@ function add_settings_section() {}
 function add_settings_field() {}
 function checked( $checked, $current = true, $display = true ) {
     $result = ( (string) $checked === (string) $current ) ? 'checked="checked"' : '';
+
+    if ( $display ) {
+        echo $result;
+    }
+
+    return $result;
+}
+function selected( $selected, $current = true, $display = true ) {
+    $result = ( (string) $selected === (string) $current ) ? 'selected="selected"' : '';
 
     if ( $display ) {
         echo $result;
