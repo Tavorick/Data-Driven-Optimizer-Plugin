@@ -28,4 +28,19 @@ class SettingsSanitizationTest extends TestCase {
         $this->assertStringStartsWith( DDO_ENCRYPTED_SECRET_PREFIX, $result );
         $this->assertSame( 'api-key', ddo_decrypt_secret( $result ) );
     }
+
+    public function test_ga4_property_id_sanitization_accepts_digits_and_rejects_other_input(): void {
+        $this->assertSame( '123456789', ddo_sanitize_ga4_property_id( '123456789' ) );
+        $this->assertSame( '', ddo_sanitize_ga4_property_id( 'abc-123' ) );
+    }
+
+    public function test_ga4_service_account_json_sanitization_encrypts_and_reuses_existing_value_when_empty(): void {
+        $encrypted = ddo_sanitize_ga4_service_account_json( "  token-reference-123  " );
+        $this->assertStringStartsWith( DDO_ENCRYPTED_SECRET_PREFIX, $encrypted );
+        $this->assertSame( 'token-reference-123', ddo_decrypt_secret( $encrypted ) );
+
+        update_option( 'ddo_ga4_service_account_json', $encrypted );
+        $this->assertSame( $encrypted, ddo_sanitize_ga4_service_account_json( '' ) );
+    }
+
 }

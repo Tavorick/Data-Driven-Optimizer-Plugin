@@ -182,4 +182,29 @@ class RenderOutputSnapshotTest extends TestCase {
 
         return is_string( $normalized ) ? trim( $normalized ) : '';
     }
+
+    public function test_render_pageviews_summary_card_shows_totals_and_top_paths(): void {
+        $summary = array(
+            'totalPageviews' => 120,
+            'topPages'       => array(
+                array(
+                    'page_path'       => '/home',
+                    'total_pageviews' => 80,
+                ),
+                array(
+                    'page_path'       => '/pricing',
+                    'total_pageviews' => 40,
+                ),
+            ),
+        );
+
+        ob_start();
+        ddo_render_pageviews_summary_card( $summary );
+        $output = $this->normalizeHtml( ob_get_clean() );
+
+        $this->assertStringContainsString( '<h3>Pageviews laatste 7 dagen</h3><p>120</p>', $output );
+        $this->assertStringContainsString( 'Top 5 page paths', $output );
+        $this->assertStringContainsString( '<code>/home</code> — 80', $output );
+    }
+
 }

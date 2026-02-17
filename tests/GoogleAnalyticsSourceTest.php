@@ -95,4 +95,38 @@ class GoogleAnalyticsSourceTest extends TestCase {
         $this->assertInstanceOf( WP_Error::class, $result );
         $this->assertSame( 'ddo_ga4_auth_failed', $result->get_error_code() );
     }
+
+    public function test_fetch_google_pageviews_maps_rows_to_internal_structure(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['remote_post_queue'] = array(
+            array(
+                'response' => array( 'code' => 200 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'rows' => array(
+                            array(
+                                'dimensionValues' => array(
+                                    array( 'value' => '20260111' ),
+                                    array( 'value' => '/docs' ),
+                                ),
+                                'metricValues'    => array(
+                                    array( 'value' => '14' ),
+                                ),
+                            ),
+                        ),
+                    )
+                ),
+            ),
+        );
+
+        $result = ddo_fetch_google_pageviews( '2026-01-10', '2026-01-11' );
+
+        $this->assertSame( 1, $result['fetched'] );
+        $this->assertSame( '2026-01-11', $result['rows'][0]['metric_date'] );
+        $this->assertSame( '/docs', $result['rows'][0]['page_path'] );
+        $this->assertSame( 14, $result['rows'][0]['pageviews'] );
+        $this->assertSame( 'ga4', $result['rows'][0]['source'] );
+    }
+
 }

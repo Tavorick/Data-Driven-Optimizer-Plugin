@@ -56,6 +56,47 @@ Gebruik deze sectie om zichtbare admin-UI wijzigingen traceerbaar vast te leggen
 - ✅ REST status endpoint (`/ddo/v1/status`).
 - ✅ Nieuwe feedback-flow: REST submit + feedbacksamenvatting endpoint en dashboard-inzichten.
 
+
+## Eerste databron activeren: GA4 pageviews
+
+Volg exact deze stappen om de eerste bron (GA4 pageviews) te activeren:
+
+1. Open **WordPress Admin → DD Optimizer → Instellingen**.
+2. Vul **GA4 Property ID** in met alleen cijfers (bijv. `123456789`).
+3. Vul **GA4 service account JSON/tokenreferentie** in met je service account JSON of tokenreferentie.
+4. Klik **Instellingen opslaan**.
+5. Open **DD Optimizer → Scheduler** en start de fetch-job handmatig (Run now), of wacht op de eerstvolgende geplande run.
+
+### Handmatige validatie (stap-voor-stap)
+
+1. Controleer na een run in **Scheduler status** dat de job niet faalt op `ga4-missing-config`.
+2. Controleer in **Recente scheduler events** dat je een succesvolle fetch ziet voor de bron `ga4`.
+3. Open **DD Optimizer → Pageviews**.
+4. Verifieer dat de card zichtbaar is met:
+   - **Pageviews laatste 7 dagen**
+   - **Top 5 page paths**
+5. Valideer API-response handmatig als admin:
+
+```bash
+curl -X GET "https://example.com/wp-json/ddo/v1/pageviews/summary?days=7" \
+  -H "X-WP-Nonce: <admin_nonce>"
+```
+
+Verwachte shape:
+
+```json
+{
+  "days": 7,
+  "totalPageviews": 1234,
+  "topPages": [
+    {
+      "page_path": "/",
+      "total_pageviews": 456
+    }
+  ]
+}
+```
+
 ## DDO REST API contracten
 
 Alle routes vallen onder namespace `ddo/v1`.
@@ -203,6 +244,46 @@ curl -X GET "https://example.com/wp-json/ddo/v1/feedback/summary" \
     "days": 30,
     "sort": "count_desc"
   }
+}
+```
+
+**Mogelijke foutcodes**
+- `401/403 rest_forbidden`: caller mist `manage_options`.
+
+---
+
+### 4) `GET /wp-json/ddo/v1/pageviews/summary`
+
+**Doel**
+Geeft een compacte pageviews-samenvatting terug voor het dashboard (totaal + top pagina's).
+
+**Permissiemodel**
+- `permission_callback`: `ddo_api_manage_options_permission`.
+- Vereist capability: `manage_options`.
+
+**Query params**
+- `days` (optioneel, integer): aantal dagen terug.
+- Default: `7`.
+
+**Request voorbeeld**
+
+```bash
+curl -X GET "https://example.com/wp-json/ddo/v1/pageviews/summary?days=7" \
+  -H "X-WP-Nonce: <admin_nonce>"
+```
+
+**Succesresponse (`200`)**
+
+```json
+{
+  "days": 7,
+  "totalPageviews": 1234,
+  "topPages": [
+    {
+      "page_path": "/pricing",
+      "total_pageviews": 240
+    }
+  ]
 }
 ```
 
