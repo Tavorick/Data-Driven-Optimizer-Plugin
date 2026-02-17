@@ -269,7 +269,7 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
                 ddo_log_scheduler_event(
                     $job_name,
                     'ga4-retry-scheduled',
-                    'warning',
+                    'info',
                     array(
                         'metric'         => $metric_name,
                         'response_code'  => $response_code,
@@ -348,9 +348,9 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
             );
 
             if ( $is_transient ) {
-                $context['retry_advice']          = __( 'Retry with exponential backoff and jitter (start at 60s, max 15m).', 'data-driven-optimizer' );
+                $context['retry_advice']          = __( 'Retry with short exponential backoff (1s, 3s).', 'data-driven-optimizer' );
                 $context['retryable']             = true;
-                $context['suggested_retry_after'] = 60;
+                $context['suggested_retry_after'] = 1;
             }
 
             ddo_log_scheduler_event(

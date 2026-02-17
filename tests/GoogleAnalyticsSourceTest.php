@@ -214,7 +214,7 @@ class GoogleAnalyticsSourceTest extends TestCase {
         $this->assertSame( 'resource_exhausted', $events[0]['context']['google_status'] );
         $this->assertSame( 'Quota exceeded', $events[0]['context']['google_message'] );
         $this->assertTrue( $events[0]['context']['retryable'] );
-        $this->assertSame( 60, $events[0]['context']['suggested_retry_after'] );
+        $this->assertSame( 1, $events[0]['context']['suggested_retry_after'] );
     }
 
 
