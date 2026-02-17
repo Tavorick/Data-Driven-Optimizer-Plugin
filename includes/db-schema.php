@@ -175,7 +175,10 @@ function ddo_store_pageviews_rows( $rows ) {
         $pageviews   = isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0;
         $source      = isset( $row['source'] ) ? sanitize_text_field( (string) $row['source'] ) : 'ga4';
 
-        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $metric_date ) || '' === $page_path ) {
+        $is_valid_date = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $metric_date )
+            && $metric_date === gmdate( 'Y-m-d', strtotime( $metric_date ) );
+
+        if ( ! $is_valid_date || '' === $page_path ) {
             ++$skipped;
             continue;
         }
@@ -211,7 +214,7 @@ function ddo_store_pageviews_rows( $rows ) {
 
         $query_sql = "INSERT INTO {$table} (metric_date, page_path, pageviews, source, created_at, updated_at) VALUES " . implode( ', ', $values_sql );
 
-        $prepared = $wpdb->prepare( $query_sql, $prepare_args );
+        $prepared = $wpdb->prepare( $query_sql, ...$prepare_args );
 
         if ( false === $prepared ) {
             $errors += count( $chunk );
