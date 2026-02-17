@@ -68,7 +68,21 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
     $property_id      = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
     $service_secret   = ddo_get_secret_option( 'ddo_ga4_service_account_json' );
     $legacy_api_token = ddo_get_api_key( 'ddo_api_key_primary' );
-    $access_token     = '' !== $service_secret ? $service_secret : $legacy_api_token;
+    $access_token     = ddo_get_ga4_access_token( $service_secret, $legacy_api_token );
+
+    if ( is_wp_error( $access_token ) ) {
+        ddo_log_scheduler_event(
+            $job_name,
+            'ga4-access-token-unavailable',
+            'error',
+            array(
+                'error_code' => ddo_get_wp_error_code_safe( $access_token ),
+                'message'    => ddo_get_wp_error_message_safe( $access_token ),
+            )
+        );
+
+        return $access_token;
+    }
 
     if ( '' === $property_id || '' === $access_token ) {
         $error = new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul Property ID en service account JSON/token in.', 'data-driven-optimizer' ) );
@@ -223,6 +237,121 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
         'rows'    => array(),
         'fetched' => 0,
     );
+}
+
+/**
+ * Resolve GA4 access token from a service-account secret or fallback token.
+ *
+ * @param string $service_secret Service-account JSON of direct bearer token.
+ * @param string $fallback_token Legacy fallback token.
+ * @return string|WP_Error
+ */
+function ddo_get_ga4_access_token( $service_secret, $fallback_token = '' ) {
+    $service_secret = is_string( $service_secret ) ? trim( $service_secret ) : '';
+    $fallback_token = is_string( $fallback_token ) ? trim( $fallback_token ) : '';
+
+    if ( '' === $service_secret ) {
+        return $fallback_token;
+    }
+
+    if ( '{' !== substr( $service_secret, 0, 1 ) ) {
+        return $service_secret;
+    }
+
+    $credentials = json_decode( $service_secret, true );
+
+    if ( ! is_array( $credentials ) ) {
+        return '' !== $fallback_token
+            ? $fallback_token
+            : new WP_Error( 'ddo_ga4_service_account_json_invalid', __( 'GA4 service-account JSON is ongeldig.', 'data-driven-optimizer' ) );
+    }
+
+    if ( empty( $credentials['client_email'] ) || empty( $credentials['private_key'] ) ) {
+        return '' !== $fallback_token
+            ? $fallback_token
+            : new WP_Error( 'ddo_ga4_service_account_json_missing_fields', __( 'GA4 service-account JSON mist verplichte velden.', 'data-driven-optimizer' ) );
+    }
+
+    return ddo_request_ga4_service_account_access_token( $credentials );
+}
+
+/**
+ * Request an OAuth2 access token from Google using service-account credentials.
+ *
+ * @param array $credentials Service-account credentials.
+ * @return string|WP_Error
+ */
+function ddo_request_ga4_service_account_access_token( $credentials ) {
+    if ( ! function_exists( 'openssl_sign' ) ) {
+        return new WP_Error( 'ddo_ga4_openssl_missing', __( 'OpenSSL ondersteuning ontbreekt voor GA4 authenticatie.', 'data-driven-optimizer' ) );
+    }
+
+    $client_email = sanitize_text_field( (string) $credentials['client_email'] );
+    $private_key  = str_replace( "\\n", "\n", (string) $credentials['private_key'] );
+    $token_uri    = isset( $credentials['token_uri'] ) ? esc_url_raw( (string) $credentials['token_uri'] ) : 'https://oauth2.googleapis.com/token';
+
+    if ( '' === $client_email || '' === $private_key || '' === $token_uri ) {
+        return new WP_Error( 'ddo_ga4_service_account_invalid', __( 'GA4 service-account credentials zijn onvolledig.', 'data-driven-optimizer' ) );
+    }
+
+    $issued_at = time();
+    $payload   = array(
+        'iss'   => $client_email,
+        'scope' => 'https://www.googleapis.com/auth/analytics.readonly',
+        'aud'   => $token_uri,
+        'iat'   => $issued_at,
+        'exp'   => $issued_at + 3600,
+    );
+
+    $jwt_header   = ddo_base64url_encode( wp_json_encode( array( 'alg' => 'RS256', 'typ' => 'JWT' ) ) );
+    $jwt_payload  = ddo_base64url_encode( wp_json_encode( $payload ) );
+    $jwt_unsigned = $jwt_header . '.' . $jwt_payload;
+
+    $signature = '';
+    $signed    = openssl_sign( $jwt_unsigned, $signature, $private_key, OPENSSL_ALGO_SHA256 );
+
+    if ( ! $signed ) {
+        return new WP_Error( 'ddo_ga4_jwt_sign_failed', __( 'Kon GA4 service-account JWT niet ondertekenen.', 'data-driven-optimizer' ) );
+    }
+
+    $assertion = $jwt_unsigned . '.' . ddo_base64url_encode( $signature );
+
+    $token_response = wp_remote_post(
+        $token_uri,
+        array(
+            'timeout' => 20,
+            'headers' => array(
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ),
+            'body'    => array(
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion'  => $assertion,
+            ),
+        )
+    );
+
+    if ( is_wp_error( $token_response ) ) {
+        return new WP_Error( 'ddo_ga4_token_request_failed', __( 'Kon geen GA4 access token ophalen.', 'data-driven-optimizer' ) );
+    }
+
+    $status_code = (int) wp_remote_retrieve_response_code( $token_response );
+    $token_body  = json_decode( (string) wp_remote_retrieve_body( $token_response ), true );
+
+    if ( $status_code >= 400 || ! is_array( $token_body ) || empty( $token_body['access_token'] ) ) {
+        return new WP_Error( 'ddo_ga4_token_invalid_response', __( 'GA4 token endpoint gaf een ongeldige response.', 'data-driven-optimizer' ) );
+    }
+
+    return sanitize_text_field( (string) $token_body['access_token'] );
+}
+
+/**
+ * Base64-url encode helper for JWT signing.
+ *
+ * @param string $value Input value.
+ * @return string
+ */
+function ddo_base64url_encode( $value ) {
+    return rtrim( strtr( base64_encode( (string) $value ), '+/', '-_' ), '=' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
 }
 
 /**

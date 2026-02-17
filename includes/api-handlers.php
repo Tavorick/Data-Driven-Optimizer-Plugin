@@ -641,17 +641,27 @@ function ddo_default_api_data_fetch_service() {
     if ( is_wp_error( $fetch_result ) ) {
         return array(
             'processed_count' => 0,
+            'records_fetched' => 0,
+            'records_stored'  => 0,
             'errors_count'    => 1,
             'error_code'      => ddo_get_wp_error_code_safe( $fetch_result ),
             'source'          => 'ga4',
         );
     }
 
+    $rows           = isset( $fetch_result['rows'] ) && is_array( $fetch_result['rows'] ) ? $fetch_result['rows'] : array();
+    $records_fetched = isset( $fetch_result['fetched'] ) ? (int) $fetch_result['fetched'] : count( $rows );
+    $storage_result = ddo_store_pageviews_rows( $rows );
+    $records_stored = isset( $storage_result['inserted'] ) ? (int) $storage_result['inserted'] : 0;
+    $storage_errors = isset( $storage_result['errors'] ) ? (int) $storage_result['errors'] : 0;
+
     return array(
-        'processed_count' => isset( $fetch_result['fetched'] ) ? (int) $fetch_result['fetched'] : 0,
-        'records_fetched' => isset( $fetch_result['fetched'] ) ? (int) $fetch_result['fetched'] : 0,
-        'rows'            => isset( $fetch_result['rows'] ) && is_array( $fetch_result['rows'] ) ? $fetch_result['rows'] : array(),
-        'errors_count'    => 0,
+        'processed_count' => max( 0, $records_stored ),
+        'records_fetched' => max( 0, $records_fetched ),
+        'records_stored'  => max( 0, $records_stored ),
+        'rows'            => $rows,
+        'errors_count'    => max( 0, $storage_errors ),
+        'error_code'      => $storage_errors > 0 ? 'ddo_pageviews_store_failed' : '',
         'source'          => 'ga4',
     );
 }

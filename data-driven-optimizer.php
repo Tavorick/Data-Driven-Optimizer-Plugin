@@ -3,7 +3,7 @@
  * Plugin Name: Data Driven Optimizer
  * Plugin URI:  https://example.com/data-driven-optimizer
  * Description: Basisplugin met admin-dashboard, instellingen en API-handlers.
- * Version:     1.2.5
+ * Version:     1.2.6
  * Author:      DDO Team
  * License:     GPL-2.0-or-later
  * Text Domain: data-driven-optimizer
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'DDO_PLUGIN_VERSION', '1.2.5' );
+define( 'DDO_PLUGIN_VERSION', '1.2.6' );
 define( 'DDO_PLUGIN_FILE', __FILE__ );
 define( 'DDO_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'DDO_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

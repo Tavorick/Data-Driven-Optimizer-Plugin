@@ -104,6 +104,7 @@ function esc_attr_e( $text, $domain = null ) {
 }
 function esc_html( $text ) { return (string) $text; }
 function esc_url( $value ) { return (string) $value; }
+function esc_url_raw( $value ) { return (string) $value; }
 function number_format_i18n( $number, $decimals = 0 ) {
     return number_format( (float) $number, (int) $decimals, '.', ',' );
 }
