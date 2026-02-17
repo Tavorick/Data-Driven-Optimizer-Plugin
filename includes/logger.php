@@ -62,6 +62,10 @@ function ddo_is_sensitive_log_key( $key ) {
         return false;
     }
 
+    if ( in_array( $key, array( 'token_uri', 'oauth_token_uri' ), true ) ) {
+        return false;
+    }
+
     foreach ( array( 'api_key', 'apikey', 'secret', 'token', 'signature', 'hash', 'password', 'authorization' ) as $needle ) {
         if ( false !== strpos( $key, $needle ) ) {
             return true;
