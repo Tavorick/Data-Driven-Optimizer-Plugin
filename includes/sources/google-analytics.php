@@ -318,6 +318,7 @@ function ddo_validate_ga4_runtime_config() {
     $property_id      = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
     $service_secret   = ddo_get_secret_option( 'ddo_ga4_service_account_json' );
     $legacy_api_token = ddo_get_api_key( 'ddo_api_key_primary' );
+    $auth_mode        = ddo_get_ga4_auth_mode();
 
     $property_id      = is_string( $property_id ) ? trim( $property_id ) : '';
     $service_secret   = is_string( $service_secret ) ? trim( $service_secret ) : '';
@@ -326,36 +327,45 @@ function ddo_validate_ga4_runtime_config() {
     $context = array(
         'property_id_present' => '' !== $property_id,
         'secret_present'      => '' !== $service_secret,
-        'mode'                => 'missing',
+        'mode'                => $auth_mode,
     );
 
-    if ( '' !== $service_secret && '{' === substr( ltrim( $service_secret ), 0, 1 ) ) {
-        $context['mode'] = 'service_account_json';
+    if ( 'service_account_json' === $auth_mode ) {
+        if ( '' === $service_secret ) {
+            return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
+        }
 
         $credentials = json_decode( $service_secret, true );
 
         if ( ! is_array( $credentials ) ) {
-            if ( '' !== $legacy_api_token ) {
-                $context['mode'] = 'fallback_token';
-            } else {
-                return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
-            }
+            return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
         } elseif ( empty( $credentials['client_email'] ) || empty( $credentials['private_key'] ) ) {
             return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
         }
-    } elseif ( '' !== $service_secret || '' !== $legacy_api_token ) {
-        $context['mode'] = 'fallback_token';
+    } elseif ( '' === $legacy_api_token ) {
+        return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie mist bearer token.', 'data-driven-optimizer' ), $context );
     }
 
     if ( 1 !== preg_match( '/^\d{4,20}$/', $property_id ) ) {
         return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
     }
 
-    if ( 'missing' === $context['mode'] ) {
-        return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
+    return true;
+}
+
+/**
+ * Geef de ingestelde GA4 authenticatiemodus terug.
+ *
+ * @return string
+ */
+function ddo_get_ga4_auth_mode() {
+    $auth_mode = sanitize_key( (string) get_option( 'ddo_ga4_auth_mode', 'bearer_token' ) );
+
+    if ( in_array( $auth_mode, array( 'service_account_json', 'bearer_token' ), true ) ) {
+        return $auth_mode;
     }
 
-    return true;
+    return 'bearer_token';
 }
 
 /**
@@ -368,27 +378,28 @@ function ddo_validate_ga4_runtime_config() {
 function ddo_get_ga4_access_token( $service_secret, $fallback_token = '' ) {
     $service_secret = is_string( $service_secret ) ? trim( $service_secret ) : '';
     $fallback_token = is_string( $fallback_token ) ? trim( $fallback_token ) : '';
+    $auth_mode      = ddo_get_ga4_auth_mode();
 
-    if ( '' === $service_secret ) {
+    if ( 'bearer_token' === $auth_mode ) {
+        if ( '' === $fallback_token ) {
+            return new WP_Error( 'ddo_ga4_bearer_token_missing', __( 'GA4 bearer token ontbreekt.', 'data-driven-optimizer' ) );
+        }
+
         return $fallback_token;
     }
 
-    if ( '{' !== substr( $service_secret, 0, 1 ) ) {
-        return $service_secret;
+    if ( '' === $service_secret ) {
+        return new WP_Error( 'ddo_ga4_service_account_json_missing_fields', __( 'GA4 service-account JSON mist verplichte velden.', 'data-driven-optimizer' ) );
     }
 
     $credentials = json_decode( $service_secret, true );
 
     if ( ! is_array( $credentials ) ) {
-        return '' !== $fallback_token
-            ? $fallback_token
-            : new WP_Error( 'ddo_ga4_service_account_json_invalid', __( 'GA4 service-account JSON is ongeldig.', 'data-driven-optimizer' ) );
+        return new WP_Error( 'ddo_ga4_service_account_json_invalid', __( 'GA4 service-account JSON is ongeldig.', 'data-driven-optimizer' ) );
     }
 
     if ( empty( $credentials['client_email'] ) || empty( $credentials['private_key'] ) ) {
-        return '' !== $fallback_token
-            ? $fallback_token
-            : new WP_Error( 'ddo_ga4_service_account_json_missing_fields', __( 'GA4 service-account JSON mist verplichte velden.', 'data-driven-optimizer' ) );
+        return new WP_Error( 'ddo_ga4_service_account_json_missing_fields', __( 'GA4 service-account JSON mist verplichte velden.', 'data-driven-optimizer' ) );
     }
 
     return ddo_request_ga4_service_account_access_token( $credentials );
@@ -411,6 +422,15 @@ function ddo_request_ga4_service_account_access_token( $credentials ) {
 
     if ( '' === $client_email || '' === $private_key || '' === $token_uri ) {
         return new WP_Error( 'ddo_ga4_service_account_invalid', __( 'GA4 service-account credentials zijn onvolledig.', 'data-driven-optimizer' ) );
+    }
+
+    $cache_key    = 'ddo_ga4_access_token_' . md5( $client_email . '|' . $token_uri ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_md5
+    $cached_token = get_transient( $cache_key );
+
+    if ( is_array( $cached_token ) && ! empty( $cached_token['access_token'] ) && ! empty( $cached_token['expires_at'] ) ) {
+        if ( (int) $cached_token['expires_at'] > ( time() + 30 ) ) {
+            return sanitize_text_field( (string) $cached_token['access_token'] );
+        }
     }
 
     $issued_at = time();
@@ -450,15 +470,70 @@ function ddo_request_ga4_service_account_access_token( $credentials ) {
     );
 
     if ( is_wp_error( $token_response ) ) {
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'ga4-token-request-failed',
+            'error',
+            array(
+                'auth_mode'  => 'service_account_json',
+                'token_uri'  => $token_uri,
+                'classifier' => 'network',
+            )
+        );
+
         return new WP_Error( 'ddo_ga4_token_request_failed', __( 'Kon geen GA4 access token ophalen.', 'data-driven-optimizer' ) );
     }
 
     $status_code = (int) wp_remote_retrieve_response_code( $token_response );
     $token_body  = json_decode( (string) wp_remote_retrieve_body( $token_response ), true );
 
-    if ( $status_code >= 400 || ! is_array( $token_body ) || empty( $token_body['access_token'] ) ) {
+    if ( $status_code >= 400 ) {
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'ga4-token-request-failed',
+            'error',
+            array(
+                'auth_mode'  => 'service_account_json',
+                'token_uri'  => $token_uri,
+                'classifier' => 'auth',
+                'status_code'=> $status_code,
+            )
+        );
+
         return new WP_Error( 'ddo_ga4_token_invalid_response', __( 'GA4 token endpoint gaf een ongeldige response.', 'data-driven-optimizer' ) );
     }
+
+    if ( ! is_array( $token_body ) ) {
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'ga4-token-request-failed',
+            'error',
+            array(
+                'auth_mode'  => 'service_account_json',
+                'token_uri'  => $token_uri,
+                'classifier' => 'invalid_json',
+            )
+        );
+
+        return new WP_Error( 'ddo_ga4_token_invalid_response', __( 'GA4 token endpoint gaf een ongeldige response.', 'data-driven-optimizer' ) );
+    }
+
+    if ( empty( $token_body['access_token'] ) ) {
+        return new WP_Error( 'ddo_ga4_token_invalid_response', __( 'GA4 token endpoint gaf een ongeldige response.', 'data-driven-optimizer' ) );
+    }
+
+    $expires_in = isset( $token_body['expires_in'] ) ? (int) $token_body['expires_in'] : 3600;
+    $expires_in = max( 60, $expires_in );
+    $expires_at = time() + $expires_in;
+
+    set_transient(
+        $cache_key,
+        array(
+            'access_token' => sanitize_text_field( (string) $token_body['access_token'] ),
+            'expires_at'   => $expires_at,
+        ),
+        max( 60, $expires_in - 30 )
+    );
 
     return sanitize_text_field( (string) $token_body['access_token'] );
 }

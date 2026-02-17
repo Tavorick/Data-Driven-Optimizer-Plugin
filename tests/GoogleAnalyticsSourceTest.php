@@ -12,6 +12,17 @@ class GoogleAnalyticsSourceTest extends TestCase {
 
         update_option( 'ddo_api_key_primary', 'ga-access-token' );
         update_option( 'ddo_ga4_property_id', '123456' );
+        update_option( 'ddo_ga4_auth_mode', 'bearer_token' );
+    }
+
+    private function getServiceAccountSecretJson(): string {
+        return wp_json_encode(
+            array(
+                'client_email' => 'analytics@example.iam.gserviceaccount.com',
+                'private_key'  => "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----\n",
+                'token_uri'    => 'https://oauth2.googleapis.com/token',
+            )
+        );
     }
 
     public function test_map_ga4_response_to_rows_returns_uniform_structure(): void {
@@ -180,6 +191,68 @@ class GoogleAnalyticsSourceTest extends TestCase {
         $this->assertSame( 'Quota exceeded', $events[0]['context']['google_message'] );
         $this->assertTrue( $events[0]['context']['retryable'] );
         $this->assertSame( 60, $events[0]['context']['suggested_retry_after'] );
+    }
+
+    public function test_get_ga4_access_token_uses_bearer_mode_without_service_account_fallback(): void {
+        update_option( 'ddo_ga4_auth_mode', 'bearer_token' );
+
+        $result = ddo_get_ga4_access_token( $this->getServiceAccountSecretJson(), 'bearer-token-xyz' );
+
+        $this->assertSame( 'bearer-token-xyz', $result );
+    }
+
+    public function test_get_ga4_access_token_uses_service_account_mode_without_bearer_fallback(): void {
+        update_option( 'ddo_ga4_auth_mode', 'service_account_json' );
+
+        $result = ddo_get_ga4_access_token( 'not-json-at-all', 'bearer-token-xyz' );
+
+        $this->assertInstanceOf( WP_Error::class, $result );
+        $this->assertSame( 'ddo_ga4_service_account_json_invalid', $result->get_error_code() );
+    }
+
+    public function test_service_account_access_token_is_cached_in_transient(): void {
+        global $ddo_test_state;
+
+        update_option( 'ddo_ga4_auth_mode', 'service_account_json' );
+
+        $ddo_test_state['remote_post_queue'] = array(
+            array(
+                'response' => array( 'code' => 200 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'access_token' => 'service-token-123',
+                        'expires_in'   => 1200,
+                    )
+                ),
+            ),
+        );
+
+        $first  = ddo_get_ga4_access_token( $this->getServiceAccountSecretJson(), 'bearer-token-xyz' );
+        $second = ddo_get_ga4_access_token( $this->getServiceAccountSecretJson(), 'bearer-token-xyz' );
+
+        $this->assertSame( 'service-token-123', $first );
+        $this->assertSame( 'service-token-123', $second );
+        $this->assertCount( 1, $ddo_test_state['remote_post_calls'] );
+    }
+
+    public function test_service_account_token_failure_logs_auth_mode_token_uri_and_classifier(): void {
+        global $ddo_test_state;
+
+        update_option( 'ddo_ga4_auth_mode', 'service_account_json' );
+        $ddo_test_state['remote_post_queue'] = array(
+            array(
+                'response' => array( 'code' => 401 ),
+                'body'     => wp_json_encode( array( 'error' => 'invalid_client' ) ),
+            ),
+        );
+
+        $result = ddo_get_ga4_access_token( $this->getServiceAccountSecretJson(), '' );
+        $events = ddo_get_recent_scheduler_events( 1 );
+
+        $this->assertInstanceOf( WP_Error::class, $result );
+        $this->assertSame( 'service_account_json', $events[0]['context']['auth_mode'] );
+        $this->assertSame( 'https://oauth2.googleapis.com/token', $events[0]['context']['token_uri'] );
+        $this->assertSame( 'auth', $events[0]['context']['classifier'] );
     }
 
 }

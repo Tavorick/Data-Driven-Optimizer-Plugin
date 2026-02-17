@@ -93,6 +93,15 @@ function checked( $checked, $current = true, $display = true ) {
 
     return $result;
 }
+function selected( $selected, $current = true, $display = true ) {
+    $result = ( (string) $selected === (string) $current ) ? 'selected="selected"' : '';
+
+    if ( $display ) {
+        echo $result;
+    }
+
+    return $result;
+}
 
 function esc_html_e( $text, $domain = null ) {
     echo (string) $text;

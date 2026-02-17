@@ -83,6 +83,16 @@ function ddo_register_settings_fields() {
         )
     );
 
+    register_setting(
+        'ddo_settings_group',
+        'ddo_ga4_auth_mode',
+        array(
+            'type'              => 'string',
+            'sanitize_callback' => 'ddo_sanitize_ga4_auth_mode',
+            'default'           => 'bearer_token',
+        )
+    );
+
     add_settings_section(
         'ddo_general_settings_section',
         __( 'Algemene instellingen', 'data-driven-optimizer' ),
@@ -137,6 +147,30 @@ function ddo_register_settings_fields() {
         'ddo_settings_group',
         'ddo_general_settings_section'
     );
+
+    add_settings_field(
+        'ddo_ga4_auth_mode',
+        __( 'GA4 authenticatie modus', 'data-driven-optimizer' ),
+        'ddo_render_ga4_auth_mode_field',
+        'ddo_settings_group',
+        'ddo_general_settings_section'
+    );
+}
+
+/**
+ * Sanitize GA4 authenticatiemodus.
+ *
+ * @param string $value Ruwe auth-modus.
+ * @return string
+ */
+function ddo_sanitize_ga4_auth_mode( $value ) {
+    $value = sanitize_key( (string) $value );
+
+    if ( in_array( $value, array( 'service_account_json', 'bearer_token' ), true ) ) {
+        return $value;
+    }
+
+    return 'bearer_token';
 }
 
 /**
@@ -585,5 +619,19 @@ function ddo_render_ga4_service_account_json_field() {
         placeholder="<?php echo esc_attr( $has_secret ? __( '•••••••• (ongewijzigd)', 'data-driven-optimizer' ) : __( 'Plak service-account JSON, pad of tokenreferentie', 'data-driven-optimizer' ) ); ?>"
     ></textarea>
     <p class="description"><?php esc_html_e( 'Opslag gebeurt versleuteld. Gebruik dit veld voor service-account JSON, een pad naar een secret-bestand of een tokenreferentie. Laat leeg om bestaande waarde te behouden.', 'data-driven-optimizer' ); ?></p>
+    <?php
+}
+
+/**
+ * Render GA4 authenticatiemodus veld.
+ */
+function ddo_render_ga4_auth_mode_field() {
+    $auth_mode = ddo_sanitize_ga4_auth_mode( get_option( 'ddo_ga4_auth_mode', 'bearer_token' ) );
+    ?>
+    <select id="ddo_ga4_auth_mode" name="ddo_ga4_auth_mode">
+        <option value="service_account_json" <?php selected( $auth_mode, 'service_account_json' ); ?>><?php esc_html_e( 'Service account JSON (OAuth2)', 'data-driven-optimizer' ); ?></option>
+        <option value="bearer_token" <?php selected( $auth_mode, 'bearer_token' ); ?>><?php esc_html_e( 'Bearer token', 'data-driven-optimizer' ); ?></option>
+    </select>
+    <p class="description"><?php esc_html_e( 'Kies expliciet één authenticatiemodus. Er wordt niet stil teruggevallen op een andere modus.', 'data-driven-optimizer' ); ?></p>
     <?php
 }
