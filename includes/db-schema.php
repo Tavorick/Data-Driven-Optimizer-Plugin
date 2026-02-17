@@ -175,8 +175,9 @@ function ddo_store_pageviews_rows( $rows ) {
         $pageviews   = isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0;
         $source      = isset( $row['source'] ) ? sanitize_text_field( (string) $row['source'] ) : 'ga4';
 
-        $is_valid_date = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $metric_date )
-            && $metric_date === gmdate( 'Y-m-d', strtotime( $metric_date ) );
+        $date_parts    = array();
+        $is_valid_date = 1 === preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $metric_date, $date_parts )
+            && checkdate( (int) $date_parts[2], (int) $date_parts[3], (int) $date_parts[1] );
 
         if ( ! $is_valid_date || '' === $page_path ) {
             ++$skipped;
@@ -228,7 +229,7 @@ function ddo_store_pageviews_rows( $rows ) {
             continue;
         }
 
-        $inserted += (int) $result;
+        $inserted += count( $chunk );
     }
 
     return array(
