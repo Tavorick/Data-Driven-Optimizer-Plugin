@@ -240,6 +240,55 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
 }
 
 /**
+ * Valideer GA4 runtime configuratie voordat requests worden uitgevoerd.
+ *
+ * @return true|WP_Error
+ */
+function ddo_validate_ga4_runtime_config() {
+    $property_id      = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
+    $service_secret   = ddo_get_secret_option( 'ddo_ga4_service_account_json' );
+    $legacy_api_token = ddo_get_api_key( 'ddo_api_key_primary' );
+
+    $property_id      = is_string( $property_id ) ? trim( $property_id ) : '';
+    $service_secret   = is_string( $service_secret ) ? trim( $service_secret ) : '';
+    $legacy_api_token = is_string( $legacy_api_token ) ? trim( $legacy_api_token ) : '';
+
+    $context = array(
+        'property_id_present' => '' !== $property_id,
+        'secret_present'      => '' !== $service_secret,
+        'mode'                => 'missing',
+    );
+
+    if ( '' !== $service_secret && '{' === substr( ltrim( $service_secret ), 0, 1 ) ) {
+        $context['mode'] = 'service_account_json';
+
+        $credentials = json_decode( $service_secret, true );
+
+        if ( ! is_array( $credentials ) ) {
+            if ( '' !== $legacy_api_token ) {
+                $context['mode'] = 'fallback_token';
+            } else {
+                return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
+            }
+        } elseif ( empty( $credentials['client_email'] ) || empty( $credentials['private_key'] ) ) {
+            return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
+        }
+    } elseif ( '' !== $service_secret || '' !== $legacy_api_token ) {
+        $context['mode'] = 'fallback_token';
+    }
+
+    if ( 1 !== preg_match( '/^\d{4,20}$/', $property_id ) ) {
+        return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
+    }
+
+    if ( 'missing' === $context['mode'] ) {
+        return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
+    }
+
+    return true;
+}
+
+/**
  * Resolve GA4 access token from a service-account secret or fallback token.
  *
  * @param string $service_secret Service-account JSON of direct bearer token.

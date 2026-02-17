@@ -636,6 +636,44 @@ function ddo_default_api_data_fetch_service() {
     $start_date = gmdate( 'Y-m-d', min( $start_timestamp, $end_timestamp ) );
     $end_date   = gmdate( 'Y-m-d', $end_timestamp );
 
+    $runtime_config_validation = ddo_validate_ga4_runtime_config();
+
+    if ( is_wp_error( $runtime_config_validation ) ) {
+        $validation_context = $runtime_config_validation->get_error_data( 'ddo_ga4_missing_config' );
+        $validation_context = is_array( $validation_context ) ? $validation_context : array();
+
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'ga4-missing-config',
+            'error',
+            array(
+                'property_id_present' => ! empty( $validation_context['property_id_present'] ),
+                'secret_present'      => ! empty( $validation_context['secret_present'] ),
+                'mode'                => isset( $validation_context['mode'] ) ? (string) $validation_context['mode'] : 'unknown',
+                'error_code'          => ddo_get_wp_error_code_safe( $runtime_config_validation ),
+            )
+        );
+
+        set_transient(
+            'ddo_ga4_runtime_config_notice',
+            array(
+                'property_id_present' => ! empty( $validation_context['property_id_present'] ),
+                'secret_present'      => ! empty( $validation_context['secret_present'] ),
+                'mode'                => isset( $validation_context['mode'] ) ? (string) $validation_context['mode'] : 'unknown',
+            ),
+            HOUR_IN_SECONDS
+        );
+
+        return array(
+            'processed_count' => 0,
+            'records_fetched' => 0,
+            'records_stored'  => 0,
+            'errors_count'    => 1,
+            'error_code'      => ddo_get_wp_error_code_safe( $runtime_config_validation ),
+            'source'          => 'ga4',
+        );
+    }
+
     $fetch_result = ddo_fetch_google_pageviews( $start_date, $end_date );
 
     if ( is_wp_error( $fetch_result ) ) {
