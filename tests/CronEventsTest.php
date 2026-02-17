@@ -108,6 +108,7 @@ class CronEventsTest extends TestCase {
         $this->assertArrayHasKey( 'last_success', $metadata );
         $this->assertArrayHasKey( 'last_run_duration', $metadata );
         $this->assertSame( '', $metadata['last_error_message'] );
+        $this->assertSame( '', $metadata['last_error_code'] );
         $this->assertIsFloat( $metadata['last_run_duration'] );
         $this->assertGreaterThanOrEqual( 0.0, $metadata['last_run_duration'] );
     }
@@ -128,10 +129,35 @@ class CronEventsTest extends TestCase {
         $this->assertArrayHasKey( 'last_error_at', $metadata );
         $this->assertArrayHasKey( 'last_run_duration', $metadata );
         $this->assertSame( 'kapot', $metadata['last_error_message'] );
+        $this->assertSame( 'ddo_scheduler_job_failed', $metadata['last_error_code'] );
         $this->assertIsFloat( $metadata['last_run_duration'] );
         $this->assertGreaterThanOrEqual( 0.0, $metadata['last_run_duration'] );
     }
 
+
+
+    public function test_execute_scheduled_job_stores_non_zero_error_code_for_failed_api_fetch(): void {
+        global $ddo_test_state;
+
+        ddo_set_api_data_fetch_service(
+            function () {
+                return array(
+                    'processed_count' => 0,
+                    'errors_count'    => 1,
+                    'error_code'      => 'ddo_ga4_upstream_transient',
+                );
+            }
+        );
+
+        ddo_execute_scheduled_job( 'ddo_hourly_fetch', 'ddo_process_api_data_fetch' );
+
+        $metadata = $ddo_test_state['options']['ddo_scheduler_job_metadata']['ddo_hourly_fetch'] ?? array();
+
+        $this->assertArrayHasKey( 'last_error_code', $metadata );
+        $this->assertNotSame( '', $metadata['last_error_code'] );
+        $this->assertNotSame( '0', (string) $metadata['last_error_code'] );
+        $this->assertSame( 'ddo_ga4_upstream_transient', $metadata['last_error_code'] );
+    }
 
     public function test_run_scheduler_job_request_rejects_bulk_when_nonce_invalid(): void {
         $result = ddo_process_run_scheduler_job_request(

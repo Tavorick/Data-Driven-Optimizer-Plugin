@@ -112,6 +112,32 @@ function ddo_register_cron_callbacks() {
     add_action( 'ddo_daily_feedback_cleanup', 'ddo_run_daily_feedback_cleanup_job' );
 }
 
+/**
+ * Normaliseer foutcodes uit exceptions/errors naar consistente stringcodes.
+ *
+ * @param Throwable $throwable Opgevangen foutobject.
+ * @return string
+ */
+function ddo_normalize_scheduler_error_code( $throwable ) {
+    if ( is_object( $throwable ) && method_exists( $throwable, 'get_ddo_error_code' ) ) {
+        $ddo_error_code = (string) $throwable->get_ddo_error_code();
+
+        if ( '' !== $ddo_error_code ) {
+            return $ddo_error_code;
+        }
+    }
+
+    if ( is_object( $throwable ) && method_exists( $throwable, 'getCode' ) ) {
+        $code = (string) $throwable->getCode();
+
+        if ( '' !== $code && '0' !== $code ) {
+            return $code;
+        }
+    }
+
+    return 'ddo_scheduler_job_failed';
+}
+
 
 /**
  * Voer een geplande job uit met centrale logging en foutafhandeling.
@@ -142,6 +168,7 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
                 'last_success'       => time(),
                 'last_run_duration'  => round( $duration, 3 ),
                 'last_error_message' => '',
+                'last_error_code'    => '',
                 'last_result'        => $result,
             )
         );
@@ -158,11 +185,13 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
         );
     } catch ( Exception $exception ) {
         $duration = max( 0, microtime( true ) - $started_at );
+        $error_code = ddo_normalize_scheduler_error_code( $exception );
 
         ddo_update_scheduler_job_metadata(
             $job_name,
             array(
                 'last_error_message' => $exception->getMessage(),
+                'last_error_code'    => $error_code,
                 'last_error_at'      => time(),
                 'last_run_duration'  => round( $duration, 3 ),
             )
@@ -175,16 +204,18 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
             array(
                 'duration'   => round( $duration, 3 ),
                 'message'    => $exception->getMessage(),
-                'error_code' => (string) $exception->getCode(),
+                'error_code' => $error_code,
             )
         );
     } catch ( Error $error ) {
         $duration = max( 0, microtime( true ) - $started_at );
+        $error_code = ddo_normalize_scheduler_error_code( $error );
 
         ddo_update_scheduler_job_metadata(
             $job_name,
             array(
                 'last_error_message' => $error->getMessage(),
+                'last_error_code'    => $error_code,
                 'last_error_at'      => time(),
                 'last_run_duration'  => round( $duration, 3 ),
             )
@@ -197,7 +228,7 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
             array(
                 'duration'   => round( $duration, 3 ),
                 'message'    => $error->getMessage(),
-                'error_code' => (string) $error->getCode(),
+                'error_code' => $error_code,
             )
         );
     }
