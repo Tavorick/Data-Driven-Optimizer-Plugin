@@ -57,6 +57,22 @@ class WP_Error {
     public function get_error_message() {
         return $this->message;
     }
+
+    public function get_error_data( $code = '' ) {
+        if ( '' !== (string) $code && (string) $code !== (string) $this->code ) {
+            return null;
+        }
+
+        return $this->data;
+    }
+
+    public function add_data( $data, $code = '' ) {
+        if ( '' !== (string) $code ) {
+            $this->code = (string) $code;
+        }
+
+        $this->data = $data;
+    }
 }
 
 function is_wp_error( $value ) {
