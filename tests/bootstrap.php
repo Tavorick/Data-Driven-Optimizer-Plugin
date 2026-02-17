@@ -24,6 +24,8 @@ $ddo_test_state = array(
     'actions_run'       => array(),
     'transients'        => array(),
     'json_response'     => null,
+    'remote_post_queue' => array(),
+    'remote_post_calls' => array(),
 );
 
 class DDO_Test_Json_Response_Exception extends RuntimeException {
@@ -46,6 +48,14 @@ class WP_Error {
         $this->code    = $code;
         $this->message = $message;
         $this->data    = $data;
+    }
+
+    public function get_error_code() {
+        return $this->code;
+    }
+
+    public function get_error_message() {
+        return $this->message;
     }
 }
 
@@ -145,6 +155,33 @@ function do_action( $hook ) {
 }
 function wp_salt( $scheme = '' ) { return 'salt-' . $scheme; }
 function wp_hash( $value ) { return hash( 'sha256', (string) $value ); }
+
+function wp_remote_post( $url, $args = array() ) {
+    global $ddo_test_state;
+
+    $ddo_test_state['remote_post_calls'][] = array(
+        'url'  => $url,
+        'args' => $args,
+    );
+
+    if ( ! empty( $ddo_test_state['remote_post_queue'] ) ) {
+        return array_shift( $ddo_test_state['remote_post_queue'] );
+    }
+
+    return array(
+        'response' => array( 'code' => 200 ),
+        'body'     => wp_json_encode( array( 'rows' => array() ) ),
+    );
+}
+
+function wp_remote_retrieve_response_code( $response ) {
+    return isset( $response['response']['code'] ) ? (int) $response['response']['code'] : 0;
+}
+
+function wp_remote_retrieve_body( $response ) {
+    return isset( $response['body'] ) ? (string) $response['body'] : '';
+}
+
 function wp_json_encode( $value ) { return json_encode( $value ); }
 function rest_ensure_response( $value ) { return $value; }
 function wp_send_json_success( $data = null, $status_code = 200 ) {
@@ -454,6 +491,7 @@ $wpdb = new DDO_Fake_WPDB();
 
 require_once dirname( __DIR__ ) . '/includes/settings.php';
 require_once dirname( __DIR__ ) . '/includes/logger.php';
+require_once dirname( __DIR__ ) . '/includes/sources/google-analytics.php';
 require_once dirname( __DIR__ ) . '/includes/api-handlers.php';
 require_once dirname( __DIR__ ) . '/includes/ml-feedback.php';
 require_once dirname( __DIR__ ) . '/includes/code-introspect.php';

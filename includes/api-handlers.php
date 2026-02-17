@@ -552,10 +552,32 @@ function ddo_get_api_data_fetch_service() {
  * @return array
  */
 function ddo_default_api_data_fetch_service() {
+    $metadata     = ddo_get_scheduler_job_metadata();
+    $last_success = isset( $metadata['ddo_hourly_fetch']['last_success'] ) ? (int) $metadata['ddo_hourly_fetch']['last_success'] : 0;
+
+    $end_timestamp = time();
+    $start_timestamp = $last_success > 0 ? $last_success : ( $end_timestamp - DAY_IN_SECONDS );
+
+    $start_date = gmdate( 'Y-m-d', min( $start_timestamp, $end_timestamp ) );
+    $end_date   = gmdate( 'Y-m-d', $end_timestamp );
+
+    $fetch_result = ddo_fetch_google_pageviews( $start_date, $end_date );
+
+    if ( is_wp_error( $fetch_result ) ) {
+        return array(
+            'processed_count' => 0,
+            'errors_count'    => 1,
+            'error_code'      => ddo_get_wp_error_code_safe( $fetch_result ),
+            'source'          => 'ga4',
+        );
+    }
+
     return array(
-        'processed_count' => 0,
+        'processed_count' => isset( $fetch_result['fetched'] ) ? (int) $fetch_result['fetched'] : 0,
+        'records_fetched' => isset( $fetch_result['fetched'] ) ? (int) $fetch_result['fetched'] : 0,
+        'rows'            => isset( $fetch_result['rows'] ) && is_array( $fetch_result['rows'] ) ? $fetch_result['rows'] : array(),
         'errors_count'    => 0,
-        'source'          => 'default-api-client',
+        'source'          => 'ga4',
     );
 }
 
@@ -568,7 +590,16 @@ function ddo_process_api_data_fetch() {
     $started_at = microtime( true );
     $service    = ddo_get_api_data_fetch_service();
     $payload    = call_user_func( $service );
-    $payload    = is_array( $payload ) ? $payload : array();
+
+    if ( is_wp_error( $payload ) ) {
+        $payload = array(
+            'processed_count' => 0,
+            'errors_count'    => 1,
+            'error_code'      => ddo_get_wp_error_code_safe( $payload ),
+        );
+    }
+
+    $payload = is_array( $payload ) ? $payload : array();
 
     $processed_count = isset( $payload['processed_count'] )
         ? (int) $payload['processed_count']
