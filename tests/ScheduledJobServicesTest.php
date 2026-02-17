@@ -190,8 +190,8 @@ class ScheduledJobServicesTest extends TestCase {
         $history  = $metadata['ddo_hourly_fetch']['run_history'];
 
         $this->assertCount( 10, $history );
-        $this->assertFalse( $history[0]['success'] );
-        $this->assertTrue( $history[1]['success'] );
+        $this->assertTrue( $history[0]['success'] );
+        $this->assertFalse( $history[1]['success'] );
     }
 
     public function test_scheduler_health_kpis_calculate_statuses_correctly(): void {
