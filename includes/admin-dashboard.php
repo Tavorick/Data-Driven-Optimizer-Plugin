@@ -104,6 +104,8 @@ function ddo_render_admin_page() {
         </nav>
 
         <?php settings_errors( 'ddo_messages' ); ?>
+        <?php settings_errors( 'ddo_ga4_property_id' ); ?>
+        <?php settings_errors( 'ddo_ga4_service_account_json' ); ?>
         <?php ddo_render_scheduler_action_notice(); ?>
 
         <section id="ddo-section-instellingen" class="ddo-admin-section">

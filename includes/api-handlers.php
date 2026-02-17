@@ -619,6 +619,10 @@ function ddo_process_api_data_fetch() {
     );
 
     if ( $result['errors_count'] > 0 ) {
+        if ( 'ddo_ga4_missing_config' === $result['error_code'] ) {
+            throw new RuntimeException( 'API data fetch gestopt: GA4-configuratie is incompleet (Property ID en service account JSON/token zijn verplicht).', 0 );
+        }
+
         throw new RuntimeException( 'API data fetch failed.', 0 );
     }
 
