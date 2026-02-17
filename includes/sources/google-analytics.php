@@ -65,8 +65,10 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
         return $error;
     }
 
-    $property_id  = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
-    $access_token = ddo_get_secret_option( 'ddo_ga4_service_account_json' );
+    $property_id      = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
+    $service_secret   = ddo_get_secret_option( 'ddo_ga4_service_account_json' );
+    $legacy_api_token = ddo_get_api_key( 'ddo_api_key_primary' );
+    $access_token     = '' !== $service_secret ? $service_secret : $legacy_api_token;
 
     if ( '' === $property_id || '' === $access_token ) {
         $error = new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul Property ID en service account JSON/token in.', 'data-driven-optimizer' ) );
@@ -77,7 +79,8 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
             'error',
             array(
                 'property_id_present'      => '' !== $property_id,
-                'service_account_present' => '' !== $access_token,
+                'service_account_present'  => '' !== $service_secret,
+                'legacy_api_token_present' => '' !== $legacy_api_token,
                 'error_code'               => ddo_get_wp_error_code_safe( $error ),
             )
         );

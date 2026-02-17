@@ -392,6 +392,20 @@ function ddo_sanitize_api_key_secondary( $value ) {
 }
 
 /**
+ * Voeg Settings API foutmelding toe wanneer API beschikbaar is.
+ *
+ * @param string $setting Setting slug.
+ * @param string $code    Unieke foutcode.
+ * @param string $message Foutbericht.
+ * @param string $type    Meldingstype.
+ */
+function ddo_add_settings_error( $setting, $code, $message, $type = 'error' ) {
+    if ( function_exists( 'add_settings_error' ) ) {
+        add_settings_error( $setting, $code, $message, $type );
+    }
+}
+
+/**
  * Sanitize GA4 property ID.
  *
  * @param string $value Ruwe property ID.
@@ -401,7 +415,7 @@ function ddo_sanitize_ga4_property_id( $value ) {
     $value = is_string( $value ) ? trim( $value ) : '';
 
     if ( '' === $value ) {
-        add_settings_error(
+        ddo_add_settings_error(
             'ddo_ga4_property_id',
             'ddo_ga4_property_id_missing',
             __( 'GA4 Property ID is verplicht voor de fetch-job.', 'data-driven-optimizer' ),
@@ -412,7 +426,7 @@ function ddo_sanitize_ga4_property_id( $value ) {
     }
 
     if ( ! preg_match( '/^\d{4,20}$/', $value ) ) {
-        add_settings_error(
+        ddo_add_settings_error(
             'ddo_ga4_property_id',
             'ddo_ga4_property_id_invalid',
             __( 'GA4 Property ID moet alleen cijfers bevatten (4-20 tekens).', 'data-driven-optimizer' ),
@@ -438,7 +452,7 @@ function ddo_sanitize_ga4_service_account_json( $value ) {
         $existing = get_option( 'ddo_ga4_service_account_json', '' );
 
         if ( '' === trim( (string) $existing ) ) {
-            add_settings_error(
+            ddo_add_settings_error(
                 'ddo_ga4_service_account_json',
                 'ddo_ga4_service_account_json_missing',
                 __( 'GA4 service account JSON of tokenreferentie ontbreekt.', 'data-driven-optimizer' ),
@@ -452,7 +466,7 @@ function ddo_sanitize_ga4_service_account_json( $value ) {
     $sanitized = sanitize_textarea_field( $value );
 
     if ( '' === $sanitized ) {
-        add_settings_error(
+        ddo_add_settings_error(
             'ddo_ga4_service_account_json',
             'ddo_ga4_service_account_json_invalid',
             __( 'GA4 service account JSON of tokenreferentie is ongeldig.', 'data-driven-optimizer' ),

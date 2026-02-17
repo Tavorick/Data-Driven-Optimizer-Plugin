@@ -103,9 +103,11 @@ function ddo_render_admin_page() {
             <a href="#ddo-section-concept" class="nav-tab"><?php esc_html_e( 'Conceptinvoer', 'data-driven-optimizer' ); ?></a>
         </nav>
 
-        <?php settings_errors( 'ddo_messages' ); ?>
-        <?php settings_errors( 'ddo_ga4_property_id' ); ?>
-        <?php settings_errors( 'ddo_ga4_service_account_json' ); ?>
+        <?php if ( function_exists( 'settings_errors' ) ) : ?>
+            <?php settings_errors( 'ddo_messages' ); ?>
+            <?php settings_errors( 'ddo_ga4_property_id' ); ?>
+            <?php settings_errors( 'ddo_ga4_service_account_json' ); ?>
+        <?php endif; ?>
         <?php ddo_render_scheduler_action_notice(); ?>
 
         <section id="ddo-section-instellingen" class="ddo-admin-section">
