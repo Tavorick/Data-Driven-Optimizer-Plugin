@@ -79,6 +79,23 @@ function ddo_register_rest_routes() {
             'permission_callback' => 'ddo_api_manage_options_permission',
         )
     );
+
+    register_rest_route(
+        'ddo/v1',
+        '/pageviews/summary',
+        array(
+            'methods'             => 'GET',
+            'callback'            => 'ddo_api_get_pageviews_summary',
+            'permission_callback' => 'ddo_api_manage_options_permission',
+            'args'                => array(
+                'days' => array(
+                    'required'          => false,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ),
+            ),
+        )
+    );
 }
 
 /**
@@ -279,6 +296,64 @@ function ddo_api_validate_feedback_ad_id( $value, WP_REST_Request $request, $par
  */
 function ddo_api_get_feedback_summary() {
     return rest_ensure_response( ddo_get_feedback_summary() );
+}
+
+/**
+ * Lees compacte pageviews samenvatting uit storage.
+ *
+ * @param int $days Aantal dagen terug (0 = alles).
+ * @return array
+ */
+function ddo_get_pageviews_summary( $days ) {
+    global $wpdb;
+
+    $table = $wpdb->prefix . 'ddo_pageviews_data';
+    $days  = max( 0, absint( $days ) );
+
+    if ( $days > 365 ) {
+        $days = 365;
+    }
+
+    $where_sql   = '';
+    $prepare_arg = null;
+
+    if ( $days > 0 ) {
+        $cutoff_date = gmdate( 'Y-m-d', strtotime( '-' . $days . ' days' ) );
+        $where_sql   = ' WHERE metric_date >= %s';
+        $prepare_arg = $cutoff_date;
+    }
+
+    $totals_query = "SELECT COALESCE(SUM(pageviews), 0) FROM {$table}{$where_sql}";
+    if ( null !== $prepare_arg ) {
+        $totals_query = $wpdb->prepare( $totals_query, $prepare_arg );
+    }
+
+    $top_pages_query = "SELECT page_path, SUM(pageviews) AS total_pageviews FROM {$table}{$where_sql} GROUP BY page_path ORDER BY total_pageviews DESC, page_path ASC LIMIT 5";
+    if ( null !== $prepare_arg ) {
+        $top_pages_query = $wpdb->prepare( $top_pages_query, $prepare_arg );
+    }
+
+    $total_pageviews = (int) $wpdb->get_var( $totals_query );
+    $top_pages       = $wpdb->get_results( $top_pages_query, ARRAY_A );
+
+    return array(
+        'days'           => $days,
+        'totalPageviews' => max( 0, $total_pageviews ),
+        'topPages'       => is_array( $top_pages ) ? $top_pages : array(),
+    );
+}
+
+/**
+ * REST handler voor pageviews-samenvatting.
+ *
+ * @param WP_REST_Request $request REST request.
+ * @return WP_REST_Response
+ */
+function ddo_api_get_pageviews_summary( WP_REST_Request $request ) {
+    $params = $request->get_params();
+    $days   = isset( $params['days'] ) ? absint( $params['days'] ) : 7;
+
+    return rest_ensure_response( ddo_get_pageviews_summary( $days ) );
 }
 
 /**

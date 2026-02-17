@@ -22,7 +22,7 @@ class RestRoutesTest extends TestCase {
         ddo_register_rest_routes();
 
         $routes = $ddo_test_state['registered_routes'];
-        $this->assertCount( 3, $routes );
+        $this->assertCount( 4, $routes );
 
         $callbacks_by_route = array();
         foreach ( $routes as $route ) {
@@ -33,6 +33,7 @@ class RestRoutesTest extends TestCase {
         $this->assertSame( 'ddo_api_manage_options_permission', $callbacks_by_route['/status'] );
         $this->assertSame( 'ddo_api_submit_feedback_permission', $callbacks_by_route['/feedback'] );
         $this->assertSame( 'ddo_api_manage_options_permission', $callbacks_by_route['/feedback/summary'] );
+        $this->assertSame( 'ddo_api_manage_options_permission', $callbacks_by_route['/pageviews/summary'] );
     }
 
     public function test_manage_options_permission_callback_checks_capability(): void {
@@ -161,6 +162,26 @@ class RestRoutesTest extends TestCase {
 
         $this->assertInstanceOf( WP_Error::class, $result );
         $this->assertSame( 'ddo_feedback_client_id_format_invalid', $result->code );
+    }
+
+
+    public function test_pageviews_summary_endpoint_returns_default_period_and_respects_override(): void {
+        global $wpdb;
+
+        $wpdb->pageviews_rows = array(
+            array(
+                'metric_date' => gmdate( 'Y-m-d', strtotime( '-2 days' ) ),
+                'page_path'   => '/home',
+                'pageviews'   => 12,
+                'source'      => 'ga4',
+            ),
+        );
+
+        $default_result = ddo_api_get_pageviews_summary( new WP_REST_Request() );
+        $this->assertSame( 7, $default_result['days'] );
+
+        $custom_result = ddo_api_get_pageviews_summary( new WP_REST_Request( array( 'days' => 30 ) ) );
+        $this->assertSame( 30, $custom_result['days'] );
     }
 
 }

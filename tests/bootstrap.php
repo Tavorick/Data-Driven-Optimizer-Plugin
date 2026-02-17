@@ -308,6 +308,7 @@ class DDO_Fake_WPDB {
     public $queries = array();
     public $prepared = array();
     public $select_queries = array();
+    public $pageviews_rows = array();
 
     public function insert( $table, $data ) {
         if ( false !== strpos( $table, 'ddo_feedback' ) ) {
@@ -323,6 +324,11 @@ class DDO_Fake_WPDB {
 
     public function query( $sql ) {
         $this->queries[] = $sql;
+
+        if ( false !== strpos( $sql, 'INSERT INTO' ) && false !== strpos( $sql, 'ddo_pageviews_data' ) ) {
+            $this->ingest_pageviews_rows_from_insert_sql( $sql );
+        }
+
         return 1;
     }
 
@@ -364,6 +370,23 @@ class DDO_Fake_WPDB {
         return $prepared;
     }
 
+    public function get_var( $query ) {
+        $this->select_queries[] = $query;
+
+        if ( false === strpos( $query, 'SUM(pageviews)' ) ) {
+            return 0;
+        }
+
+        $rows = $this->filter_pageviews_rows_from_query( $query );
+
+        $total = 0;
+        foreach ( $rows as $row ) {
+            $total += isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0;
+        }
+
+        return $total;
+    }
+
     public function get_row( $query, $output = ARRAY_A ) {
         $this->select_queries[] = $query;
         $rows                   = $this->filter_feedback_rows_from_query( $query );
@@ -394,11 +417,55 @@ class DDO_Fake_WPDB {
     public function get_results( $query, $output = ARRAY_A ) {
         $this->select_queries[] = $query;
 
+        if ( false !== strpos( $query, 'SUM(pageviews) AS total_pageviews' ) ) {
+            return $this->build_pageviews_results_from_query( $query );
+        }
+
         if ( false !== strpos( $query, 'GROUP BY event_name' ) ) {
             return $this->build_event_results_from_query( $query );
         }
 
         return $this->build_recent_results_from_query( $query );
+    }
+
+    private function build_pageviews_results_from_query( $query ) {
+        $rows = $this->filter_pageviews_rows_from_query( $query );
+        $paths = array();
+
+        foreach ( $rows as $row ) {
+            $path = isset( $row['page_path'] ) ? (string) $row['page_path'] : '';
+            if ( '' === $path ) {
+                continue;
+            }
+
+            if ( ! isset( $paths[ $path ] ) ) {
+                $paths[ $path ] = 0;
+            }
+
+            $paths[ $path ] += isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0;
+        }
+
+        $results = array();
+        foreach ( $paths as $path => $total_pageviews ) {
+            $results[] = array(
+                'page_path' => $path,
+                'total_pageviews' => $total_pageviews,
+            );
+        }
+
+        usort(
+            $results,
+            static function ( $left, $right ) {
+                $cmp = (int) $right['total_pageviews'] <=> (int) $left['total_pageviews'];
+                if ( 0 !== $cmp ) {
+                    return $cmp;
+                }
+
+                return strcmp( (string) $left['page_path'], (string) $right['page_path'] );
+            }
+        );
+
+        return array_slice( $results, 0, 5 );
     }
 
     private function build_event_results_from_query( $query ) {
@@ -495,12 +562,48 @@ class DDO_Fake_WPDB {
         );
     }
 
+    private function filter_pageviews_rows_from_query( $query ) {
+        $cutoff = null;
+        if ( preg_match( "/metric_date\s*>=\s*'([^']+)'/", $query, $matches ) ) {
+            $cutoff = $matches[1];
+        }
+
+        return array_values(
+            array_filter(
+                $this->pageviews_rows,
+                static function ( $row ) use ( $cutoff ) {
+                    if ( null === $cutoff ) {
+                        return true;
+                    }
+
+                    return isset( $row['metric_date'] ) && $row['metric_date'] >= $cutoff;
+                }
+            )
+        );
+    }
+
+    private function ingest_pageviews_rows_from_insert_sql( $sql ) {
+        if ( ! preg_match_all( "/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*(\d+)\s*,\s*'([^']+)'\s*,\s*NOW\(\)\s*,\s*NOW\(\)\s*\)/", $sql, $matches, PREG_SET_ORDER ) ) {
+            return;
+        }
+
+        foreach ( $matches as $match ) {
+            $this->pageviews_rows[] = array(
+                'metric_date' => stripslashes( $match[1] ),
+                'page_path'   => stripslashes( $match[2] ),
+                'pageviews'   => (int) $match[3],
+                'source'      => stripslashes( $match[4] ),
+            );
+        }
+    }
+
     public function reset_feedback() {
         $this->insert_id     = 0;
         $this->feedback_rows = array();
         $this->queries       = array();
         $this->prepared      = array();
         $this->select_queries = array();
+        $this->pageviews_rows = array();
     }
 }
 

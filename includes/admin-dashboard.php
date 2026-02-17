@@ -83,6 +83,7 @@ function ddo_render_admin_page() {
     $concept_result   = get_transient( 'ddo_concept_result_' . get_current_user_id() );
     $feedback_filters = ddo_get_feedback_filters_from_request();
     $feedback_summary = ddo_get_feedback_summary( $feedback_filters );
+    $pageviews_summary = ddo_get_pageviews_summary( 7 );
 
     if ( false !== $concept_result ) {
         delete_transient( 'ddo_concept_result_' . get_current_user_id() );
@@ -100,6 +101,7 @@ function ddo_render_admin_page() {
             <a href="#ddo-section-instellingen" class="nav-tab"><?php esc_html_e( 'Instellingen', 'data-driven-optimizer' ); ?></a>
             <a href="#ddo-section-scheduler" class="nav-tab"><?php esc_html_e( 'Scheduler', 'data-driven-optimizer' ); ?></a>
             <a href="#ddo-section-feedback" class="nav-tab"><?php esc_html_e( 'Feedback inzichten', 'data-driven-optimizer' ); ?></a>
+            <a href="#ddo-section-pageviews" class="nav-tab"><?php esc_html_e( 'Pageviews', 'data-driven-optimizer' ); ?></a>
             <a href="#ddo-section-concept" class="nav-tab"><?php esc_html_e( 'Conceptinvoer', 'data-driven-optimizer' ); ?></a>
         </nav>
 
@@ -139,6 +141,12 @@ function ddo_render_admin_page() {
             <?php ddo_render_feedback_summary_cards( $feedback_summary ); ?>
             <h3><?php esc_html_e( 'Eventoverzicht', 'data-driven-optimizer' ); ?></h3>
             <?php ddo_render_feedback_events_table( $feedback_summary ); ?>
+        </section>
+
+
+        <section id="ddo-section-pageviews" class="ddo-admin-section">
+            <h2><?php esc_html_e( 'Pageviews', 'data-driven-optimizer' ); ?></h2>
+            <?php ddo_render_pageviews_summary_card( $pageviews_summary ); ?>
         </section>
 
         <section id="ddo-section-concept" class="ddo-admin-section">
@@ -248,6 +256,38 @@ function ddo_render_feedback_summary_cards( $summary ) {
         <div class="ddo-feedback-card">
             <h3><?php esc_html_e( 'Events zonder score', 'data-driven-optimizer' ); ?></h3>
             <p><?php echo esc_html( number_format_i18n( $unscored ) ); ?></p>
+        </div>
+    </div>
+    <?php
+}
+
+/**
+ * Render compacte pageviewskaart voor de laatste periode.
+ *
+ * @param array $summary Pageviews samenvatting.
+ */
+function ddo_render_pageviews_summary_card( $summary ) {
+    $total_pageviews = isset( $summary['totalPageviews'] ) ? (int) $summary['totalPageviews'] : 0;
+    $top_pages       = isset( $summary['topPages'] ) && is_array( $summary['topPages'] ) ? $summary['topPages'] : array();
+
+    ?>
+    <div class="ddo-feedback-cards">
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Pageviews laatste 7 dagen', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( $total_pageviews ) ); ?></p>
+            <h4><?php esc_html_e( 'Top 5 page paths', 'data-driven-optimizer' ); ?></h4>
+            <?php if ( empty( $top_pages ) ) : ?>
+                <p><?php esc_html_e( 'Nog geen pageviews-data beschikbaar.', 'data-driven-optimizer' ); ?></p>
+            <?php else : ?>
+                <ol>
+                    <?php foreach ( $top_pages as $top_page ) : ?>
+                        <li>
+                            <code><?php echo esc_html( (string) $top_page['page_path'] ); ?></code>
+                            — <?php echo esc_html( number_format_i18n( (int) $top_page['total_pageviews'] ) ); ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ol>
+            <?php endif; ?>
         </div>
     </div>
     <?php
