@@ -180,6 +180,28 @@ class GoogleAnalyticsSourceTest extends TestCase {
                     )
                 ),
             ),
+            array(
+                'response' => array( 'code' => 429 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'error' => array(
+                            'status'  => 'RESOURCE_EXHAUSTED',
+                            'message' => 'Quota exceeded',
+                        ),
+                    )
+                ),
+            ),
+            array(
+                'response' => array( 'code' => 429 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'error' => array(
+                            'status'  => 'RESOURCE_EXHAUSTED',
+                            'message' => 'Quota exceeded',
+                        ),
+                    )
+                ),
+            ),
         );
 
         $result = ddo_fetch_google_pageviews( '2026-01-09', '2026-01-10' );
@@ -187,11 +209,84 @@ class GoogleAnalyticsSourceTest extends TestCase {
 
         $this->assertInstanceOf( WP_Error::class, $result );
         $this->assertSame( 'ddo_ga4_quota_exceeded', $result->get_error_code() );
+        $this->assertCount( 3, $ddo_test_state['remote_post_calls'] );
         $this->assertSame( 429, $events[0]['context']['response_code'] );
         $this->assertSame( 'resource_exhausted', $events[0]['context']['google_status'] );
         $this->assertSame( 'Quota exceeded', $events[0]['context']['google_message'] );
         $this->assertTrue( $events[0]['context']['retryable'] );
-        $this->assertSame( 60, $events[0]['context']['suggested_retry_after'] );
+        $this->assertSame( 1, $events[0]['context']['suggested_retry_after'] );
+    }
+
+
+    public function test_fetch_google_pageviews_retries_twice_for_transient_http_errors(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['remote_post_queue'] = array(
+            array(
+                'response' => array( 'code' => 429 ),
+                'body'     => wp_json_encode( array( 'error' => array( 'status' => 'RESOURCE_EXHAUSTED', 'message' => 'Quota exceeded' ) ) ),
+            ),
+            array(
+                'response' => array( 'code' => 503 ),
+                'body'     => wp_json_encode( array( 'error' => array( 'status' => 'UNAVAILABLE', 'message' => 'Temporary unavailable' ) ) ),
+            ),
+            array(
+                'response' => array( 'code' => 200 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'rows' => array(
+                            array(
+                                'dimensionValues' => array(
+                                    array( 'value' => '20260111' ),
+                                    array( 'value' => '/retry-ok' ),
+                                ),
+                                'metricValues'    => array(
+                                    array( 'value' => '21' ),
+                                ),
+                            ),
+                        ),
+                    )
+                ),
+            ),
+        );
+
+        $result = ddo_fetch_google_pageviews( '2026-01-10', '2026-01-11' );
+        $events = ddo_get_recent_scheduler_events( 5 );
+
+        $this->assertIsArray( $result );
+        $this->assertSame( 1, $result['fetched'] );
+        $this->assertCount( 3, $ddo_test_state['remote_post_calls'] );
+        $this->assertSame( 'ga4-retry-scheduled', $events[1]['message'] );
+        $this->assertSame( 1, $events[1]['context']['retry_attempt'] );
+        $this->assertSame( 1, $events[1]['context']['retry_in'] );
+        $this->assertSame( 'ga4-retry-scheduled', $events[0]['message'] );
+        $this->assertSame( 2, $events[0]['context']['retry_attempt'] );
+        $this->assertSame( 3, $events[0]['context']['retry_in'] );
+    }
+
+    public function test_fetch_google_pageviews_stops_after_max_retries_on_5xx(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['remote_post_queue'] = array(
+            array(
+                'response' => array( 'code' => 500 ),
+                'body'     => wp_json_encode( array( 'error' => array( 'status' => 'INTERNAL', 'message' => 'Internal failure' ) ) ),
+            ),
+            array(
+                'response' => array( 'code' => 500 ),
+                'body'     => wp_json_encode( array( 'error' => array( 'status' => 'INTERNAL', 'message' => 'Internal failure' ) ) ),
+            ),
+            array(
+                'response' => array( 'code' => 500 ),
+                'body'     => wp_json_encode( array( 'error' => array( 'status' => 'INTERNAL', 'message' => 'Internal failure' ) ) ),
+            ),
+        );
+
+        $result = ddo_fetch_google_pageviews( '2026-01-09', '2026-01-10' );
+
+        $this->assertInstanceOf( WP_Error::class, $result );
+        $this->assertSame( 'ddo_ga4_upstream_transient', $result->get_error_code() );
+        $this->assertCount( 3, $ddo_test_state['remote_post_calls'] );
     }
 
     public function test_get_ga4_access_token_uses_bearer_mode_without_service_account_fallback(): void {

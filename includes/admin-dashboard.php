@@ -601,9 +601,32 @@ function ddo_get_scheduler_operational_kpis( $window_days = 30 ) {
  * Render operationele KPI kaarten en ingest-volume per dag.
  */
 function ddo_render_scheduler_kpi_block() {
-    $kpis = ddo_get_scheduler_operational_kpis( 30 );
+    $kpis            = ddo_get_scheduler_operational_kpis( 30 );
+    $metadata        = ddo_get_scheduler_job_metadata();
+    $fetch_meta      = isset( $metadata['ddo_hourly_fetch'] ) && is_array( $metadata['ddo_hourly_fetch'] ) ? $metadata['ddo_hourly_fetch'] : array();
+    $fetch_health    = ddo_get_scheduler_job_health_kpis( $fetch_meta );
+    $status          = isset( $fetch_health['status'] ) ? (string) $fetch_health['status'] : 'down';
+    $status_labels   = array(
+        'healthy'  => __( 'Healthy', 'data-driven-optimizer' ),
+        'degraded' => __( 'Degraded', 'data-driven-optimizer' ),
+        'down'     => __( 'Down', 'data-driven-optimizer' ),
+    );
+    $status_label    = isset( $status_labels[ $status ] ) ? $status_labels[ $status ] : $status_labels['down'];
+    $last_success_ts = isset( $fetch_health['last_success'] ) ? (int) $fetch_health['last_success'] : 0;
     ?>
     <div class="ddo-feedback-cards">
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Fetch success rate (last 10 runs)', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( number_format_i18n( (float) $fetch_health['success_rate'], 2 ) ); ?>%</p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Laatst succesvolle fetch', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo $last_success_ts > 0 ? esc_html( wp_date( 'Y-m-d H:i:s', $last_success_ts ) ) : esc_html__( 'Nooit', 'data-driven-optimizer' ); ?></p>
+        </div>
+        <div class="ddo-feedback-card">
+            <h3><?php esc_html_e( 'Huidige fetch status', 'data-driven-optimizer' ); ?></h3>
+            <p><?php echo esc_html( $status_label ); ?></p>
+        </div>
         <div class="ddo-feedback-card">
             <h3><?php esc_html_e( 'Run success rate (30d)', 'data-driven-optimizer' ); ?></h3>
             <p><?php echo esc_html( number_format_i18n( (float) $kpis['success_rate'], 2 ) ); ?>%</p>

@@ -155,6 +155,9 @@ class RenderOutputSnapshotTest extends TestCase {
         ddo_render_scheduler_kpi_block();
         $kpiOutput = $this->normalizeHtml( ob_get_clean() );
 
+        $this->assertStringContainsString( 'Fetch success rate (last 10 runs)', $kpiOutput );
+        $this->assertStringContainsString( 'Laatst succesvolle fetch', $kpiOutput );
+        $this->assertStringContainsString( 'Huidige fetch status', $kpiOutput );
         $this->assertStringContainsString( 'Run success rate (30d)', $kpiOutput );
         $this->assertStringContainsString( '50.00%', $kpiOutput );
         $this->assertStringContainsString( 'Median duration (30d)', $kpiOutput );
