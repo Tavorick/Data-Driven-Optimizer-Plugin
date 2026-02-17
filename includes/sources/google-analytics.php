@@ -118,7 +118,7 @@ function ddo_wait_for_ga4_retry( $delay_seconds, $deadline_ts ) {
         return false;
     }
 
-    $sleep_seconds = min( max( 0, (int) $delay_seconds ), max( 0, (int) ceil( $remaining ) ) );
+    $sleep_seconds = min( max( 0, (float) $delay_seconds ), max( 0, $remaining ) );
 
     if ( $sleep_seconds <= 0 ) {
         return false;
@@ -128,7 +128,7 @@ function ddo_wait_for_ga4_retry( $delay_seconds, $deadline_ts ) {
         return true;
     }
 
-    sleep( $sleep_seconds );
+    usleep( (int) round( $sleep_seconds * 1000000 ) );
 
     return true;
 }
@@ -291,7 +291,12 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
         }
 
         if ( is_wp_error( $http_response ) ) {
-            $error = new WP_Error( 'ddo_ga4_request_failed', __( 'GA4 request failed.', 'data-driven-optimizer' ) );
+            $error_code = ddo_get_wp_error_code_safe( $http_response );
+            $error      = new WP_Error( 'ddo_ga4_request_failed', __( 'GA4 request failed.', 'data-driven-optimizer' ) );
+
+            if ( 'ddo_ga4_request_timeout' === $error_code ) {
+                $error = new WP_Error( 'ddo_ga4_request_timeout', __( 'GA4 retry deadline exceeded.', 'data-driven-optimizer' ) );
+            }
 
             ddo_log_scheduler_event(
                 $job_name,
