@@ -29,6 +29,7 @@ Gebruik deze sectie om zichtbare admin-UI wijzigingen traceerbaar vast te leggen
 
 | Datum | Onderdeel | Wijziging | Impact voor gebruiker |
 |---|---|---|---|
+| 2026-02-17 | Releasebeheer | Pluginversie en constante verhoogd naar 1.2.3 als afgeronde taak-bump. | Versiebeheer blijft synchroon en opleveringen zijn beter traceerbaar. |
 | 2026-02-16 | QA & documentatie | Handmatige testmatrix toegevoegd, UI Definition of Done aangescherpt en render-output checks in tests uitgebreid. | Snellere regressiecontrole en duidelijkere acceptatiecriteria voor UI-tickets. |
 
 ## Admin UI conventions
