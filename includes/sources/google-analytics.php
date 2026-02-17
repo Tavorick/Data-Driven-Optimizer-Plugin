@@ -118,7 +118,7 @@ function ddo_wait_for_ga4_retry( $delay_seconds, $deadline_ts ) {
         return false;
     }
 
-    $sleep_seconds = min( max( 0, (int) $delay_seconds ), (int) floor( $remaining ) );
+    $sleep_seconds = min( max( 0, (int) $delay_seconds ), max( 0, (int) ceil( $remaining ) ) );
 
     if ( $sleep_seconds <= 0 ) {
         return false;
@@ -245,14 +245,14 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
         $decoded_body  = null;
 
         for ( $attempt = 0; $attempt <= $max_retries; $attempt++ ) {
-            $remaining = max( 1, (int) ceil( $deadline_ts - microtime( true ) ) );
+            $remaining = (int) ceil( $deadline_ts - microtime( true ) );
 
             if ( $remaining <= 0 ) {
                 $http_response = new WP_Error( 'ddo_ga4_request_timeout', __( 'GA4 retry deadline exceeded.', 'data-driven-optimizer' ) );
                 break;
             }
 
-            $request_args['timeout'] = min( $request_timeout, $remaining );
+            $request_args['timeout'] = min( $request_timeout, max( 1, $remaining ) );
             $http_response           = wp_remote_post( $endpoint, $request_args );
 
             if ( is_wp_error( $http_response ) ) {

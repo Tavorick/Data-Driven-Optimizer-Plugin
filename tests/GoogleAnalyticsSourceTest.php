@@ -180,6 +180,28 @@ class GoogleAnalyticsSourceTest extends TestCase {
                     )
                 ),
             ),
+            array(
+                'response' => array( 'code' => 429 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'error' => array(
+                            'status'  => 'RESOURCE_EXHAUSTED',
+                            'message' => 'Quota exceeded',
+                        ),
+                    )
+                ),
+            ),
+            array(
+                'response' => array( 'code' => 429 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'error' => array(
+                            'status'  => 'RESOURCE_EXHAUSTED',
+                            'message' => 'Quota exceeded',
+                        ),
+                    )
+                ),
+            ),
         );
 
         $result = ddo_fetch_google_pageviews( '2026-01-09', '2026-01-10' );
@@ -187,6 +209,7 @@ class GoogleAnalyticsSourceTest extends TestCase {
 
         $this->assertInstanceOf( WP_Error::class, $result );
         $this->assertSame( 'ddo_ga4_quota_exceeded', $result->get_error_code() );
+        $this->assertCount( 3, $ddo_test_state['remote_post_calls'] );
         $this->assertSame( 429, $events[0]['context']['response_code'] );
         $this->assertSame( 'resource_exhausted', $events[0]['context']['google_status'] );
         $this->assertSame( 'Quota exceeded', $events[0]['context']['google_message'] );
