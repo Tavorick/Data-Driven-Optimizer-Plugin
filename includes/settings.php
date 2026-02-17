@@ -63,6 +63,26 @@ function ddo_register_settings_fields() {
         )
     );
 
+    register_setting(
+        'ddo_settings_group',
+        'ddo_ga4_property_id',
+        array(
+            'type'              => 'string',
+            'sanitize_callback' => 'ddo_sanitize_ga4_property_id',
+            'default'           => '',
+        )
+    );
+
+    register_setting(
+        'ddo_settings_group',
+        'ddo_ga4_service_account_json',
+        array(
+            'type'              => 'string',
+            'sanitize_callback' => 'ddo_sanitize_ga4_service_account_json',
+            'default'           => '',
+        )
+    );
+
     add_settings_section(
         'ddo_general_settings_section',
         __( 'Algemene instellingen', 'data-driven-optimizer' ),
@@ -98,6 +118,22 @@ function ddo_register_settings_fields() {
         'ddo_feedback_retention_days',
         __( 'Feedback retentie (dagen)', 'data-driven-optimizer' ),
         'ddo_render_feedback_retention_days_field',
+        'ddo_settings_group',
+        'ddo_general_settings_section'
+    );
+
+    add_settings_field(
+        'ddo_ga4_property_id',
+        __( 'GA4 Property ID', 'data-driven-optimizer' ),
+        'ddo_render_ga4_property_id_field',
+        'ddo_settings_group',
+        'ddo_general_settings_section'
+    );
+
+    add_settings_field(
+        'ddo_ga4_service_account_json',
+        __( 'GA4 service account JSON / token referentie', 'data-driven-optimizer' ),
+        'ddo_render_ga4_service_account_json_field',
         'ddo_settings_group',
         'ddo_general_settings_section'
     );
@@ -247,6 +283,16 @@ function ddo_decrypt_secret( $value ) {
  * @return string
  */
 function ddo_get_api_key( $option_name ) {
+    return ddo_get_secret_option( $option_name );
+}
+
+/**
+ * Haal een versleutelde secret-optie op met decryptie en migratie van oude plaintext.
+ *
+ * @param string $option_name Optienaam.
+ * @return string
+ */
+function ddo_get_secret_option( $option_name ) {
     $stored = get_option( $option_name, '' );
     $stored = is_string( $stored ) ? trim( $stored ) : '';
 
@@ -346,6 +392,94 @@ function ddo_sanitize_api_key_secondary( $value ) {
 }
 
 /**
+ * Voeg Settings API foutmelding toe wanneer API beschikbaar is.
+ *
+ * @param string $setting Setting slug.
+ * @param string $code    Unieke foutcode.
+ * @param string $message Foutbericht.
+ * @param string $type    Meldingstype.
+ */
+function ddo_add_settings_error( $setting, $code, $message, $type = 'error' ) {
+    if ( function_exists( 'add_settings_error' ) ) {
+        add_settings_error( $setting, $code, $message, $type );
+    }
+}
+
+/**
+ * Sanitize GA4 property ID.
+ *
+ * @param string $value Ruwe property ID.
+ * @return string
+ */
+function ddo_sanitize_ga4_property_id( $value ) {
+    $value = is_string( $value ) ? trim( $value ) : '';
+
+    if ( '' === $value ) {
+        ddo_add_settings_error(
+            'ddo_ga4_property_id',
+            'ddo_ga4_property_id_missing',
+            __( 'GA4 Property ID is verplicht voor de fetch-job.', 'data-driven-optimizer' ),
+            'error'
+        );
+
+        return '';
+    }
+
+    if ( ! preg_match( '/^\d{4,20}$/', $value ) ) {
+        ddo_add_settings_error(
+            'ddo_ga4_property_id',
+            'ddo_ga4_property_id_invalid',
+            __( 'GA4 Property ID moet alleen cijfers bevatten (4-20 tekens).', 'data-driven-optimizer' ),
+            'error'
+        );
+
+        return '';
+    }
+
+    return $value;
+}
+
+/**
+ * Sanitize en versleutel GA4 secret/config invoer.
+ *
+ * @param string $value Ruwe GA4 secret/config input.
+ * @return string
+ */
+function ddo_sanitize_ga4_service_account_json( $value ) {
+    $value = is_string( $value ) ? trim( $value ) : '';
+
+    if ( '' === $value ) {
+        $existing = get_option( 'ddo_ga4_service_account_json', '' );
+
+        if ( '' === trim( (string) $existing ) ) {
+            ddo_add_settings_error(
+                'ddo_ga4_service_account_json',
+                'ddo_ga4_service_account_json_missing',
+                __( 'GA4 service account JSON of tokenreferentie ontbreekt.', 'data-driven-optimizer' ),
+                'error'
+            );
+        }
+
+        return is_string( $existing ) ? $existing : '';
+    }
+
+    $sanitized = sanitize_textarea_field( $value );
+
+    if ( '' === $sanitized ) {
+        ddo_add_settings_error(
+            'ddo_ga4_service_account_json',
+            'ddo_ga4_service_account_json_invalid',
+            __( 'GA4 service account JSON of tokenreferentie is ongeldig.', 'data-driven-optimizer' ),
+            'error'
+        );
+
+        return '';
+    }
+
+    return ddo_encrypt_secret( $sanitized );
+}
+
+/**
  * Render checkbox voor enabled-vlag.
  */
 function ddo_render_enabled_field() {
@@ -413,5 +547,43 @@ function ddo_render_feedback_retention_days_field() {
         class="small-text"
     />
     <p class="description"><?php esc_html_e( 'Aantal dagen dat feedbackrecords worden bewaard voordat dagelijkse cleanup oude data verwijdert. Kies een waarde tussen 7 en 3650 dagen.', 'data-driven-optimizer' ); ?></p>
+    <?php
+}
+
+/**
+ * Render GA4 Property ID veld.
+ */
+function ddo_render_ga4_property_id_field() {
+    $property_id = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
+    ?>
+    <input
+        type="text"
+        id="ddo_ga4_property_id"
+        name="ddo_ga4_property_id"
+        value="<?php echo esc_attr( $property_id ); ?>"
+        class="regular-text"
+        inputmode="numeric"
+        pattern="[0-9]{4,20}"
+        placeholder="123456789"
+    />
+    <p class="description"><?php esc_html_e( 'Numerieke GA4 property ID uit Google Analytics (bijv. 123456789). Verplicht voor geplande fetch-jobs.', 'data-driven-optimizer' ); ?></p>
+    <?php
+}
+
+/**
+ * Render GA4 secret/config veld.
+ */
+function ddo_render_ga4_service_account_json_field() {
+    $has_secret = '' !== ddo_get_secret_option( 'ddo_ga4_service_account_json' );
+    ?>
+    <textarea
+        id="ddo_ga4_service_account_json"
+        name="ddo_ga4_service_account_json"
+        rows="4"
+        class="large-text code"
+        autocomplete="off"
+        placeholder="<?php echo esc_attr( $has_secret ? __( '•••••••• (ongewijzigd)', 'data-driven-optimizer' ) : __( 'Plak service-account JSON, pad of tokenreferentie', 'data-driven-optimizer' ) ); ?>"
+    ></textarea>
+    <p class="description"><?php esc_html_e( 'Opslag gebeurt versleuteld. Gebruik dit veld voor service-account JSON, een pad naar een secret-bestand of een tokenreferentie. Laat leeg om bestaande waarde te behouden.', 'data-driven-optimizer' ); ?></p>
     <?php
 }
