@@ -334,8 +334,25 @@ class DDO_Fake_WPDB {
         $prepared = $query;
 
         foreach ( $args as $arg ) {
-            $quoted   = "'" . addslashes( (string) $arg ) . "'";
-            $prepared = preg_replace( '/%s/', $quoted, $prepared, 1 );
+            $prepared = preg_replace_callback(
+                '/%(?:\d+\$)?[sdf]/',
+                static function ( $matches ) use ( $arg ) {
+                    $placeholder = $matches[0];
+                    $type        = substr( $placeholder, -1 );
+
+                    if ( 'd' === $type ) {
+                        return (string) (int) $arg;
+                    }
+
+                    if ( 'f' === $type ) {
+                        return (string) (float) $arg;
+                    }
+
+                    return "'" . addslashes( (string) $arg ) . "'";
+                },
+                $prepared,
+                1
+            );
         }
 
         $this->prepared[] = array(

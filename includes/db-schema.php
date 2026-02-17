@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'DDO_SCHEMA_VERSION', '1.3.0' );
+define( 'DDO_SCHEMA_VERSION', '1.4.0' );
 
 /**
  * Create or update all plugin tables.
@@ -23,6 +23,7 @@ function ddo_install_database_schema() {
     $table_ga_data = $wpdb->prefix . 'ddo_ga_data';
     $table_concepts = $wpdb->prefix . 'ddo_concepts';
     $table_feedback = $wpdb->prefix . 'ddo_feedback';
+    $table_pageviews_data = $wpdb->prefix . 'ddo_pageviews_data';
 
     $sql_fb_data = "CREATE TABLE {$table_fb_data} (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -109,14 +110,133 @@ function ddo_install_database_schema() {
         KEY idx_ad_date (ad_id, feedback_date)
     ) {$charset_collate};";
 
+    $sql_pageviews_data = "CREATE TABLE {$table_pageviews_data} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        metric_date DATE NOT NULL,
+        page_path VARCHAR(191) NOT NULL,
+        pageviews BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+        source VARCHAR(50) NOT NULL DEFAULT 'ga4',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_metric_date (metric_date),
+        KEY idx_page_path (page_path),
+        KEY idx_source (source),
+        KEY idx_metric_date_path (metric_date, page_path),
+        KEY idx_metric_date_source (metric_date, source),
+        KEY idx_page_path_date (page_path, metric_date),
+        KEY idx_metric_date_path_source (metric_date, page_path, source)
+    ) {$charset_collate};";
+
     dbDelta( $sql_fb_data );
     dbDelta( $sql_ga_data );
     dbDelta( $sql_concepts );
     dbDelta( $sql_feedback );
+    dbDelta( $sql_pageviews_data );
 
     ddo_migrate_feedback_scoring_model( $table_feedback );
 
     update_option( 'ddo_schema_version', DDO_SCHEMA_VERSION );
+}
+
+/**
+ * Store GA4 pageview rows in batch.
+ *
+ * @param array $rows List met rows met keys metric_date, page_path, pageviews en optional source.
+ * @return array
+ */
+function ddo_store_pageviews_rows( $rows ) {
+    global $wpdb;
+
+    $table = $wpdb->prefix . 'ddo_pageviews_data';
+
+    if ( ! is_array( $rows ) || empty( $rows ) ) {
+        return array(
+            'inserted' => 0,
+            'skipped'  => 0,
+            'errors'   => 0,
+        );
+    }
+
+    $inserted   = 0;
+    $skipped    = 0;
+    $errors     = 0;
+    $batch_size = 200;
+    $valid_rows = array();
+
+    foreach ( $rows as $row ) {
+        if ( ! is_array( $row ) ) {
+            ++$skipped;
+            continue;
+        }
+
+        $metric_date = isset( $row['metric_date'] ) ? trim( (string) $row['metric_date'] ) : '';
+        $page_path   = isset( $row['page_path'] ) ? trim( (string) $row['page_path'] ) : '';
+        $pageviews   = isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0;
+        $source      = isset( $row['source'] ) ? sanitize_text_field( (string) $row['source'] ) : 'ga4';
+
+        $date_parts    = array();
+        $is_valid_date = 1 === preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $metric_date, $date_parts )
+            && checkdate( (int) $date_parts[2], (int) $date_parts[3], (int) $date_parts[1] );
+
+        if ( ! $is_valid_date || '' === $page_path ) {
+            ++$skipped;
+            continue;
+        }
+
+        $valid_rows[] = array(
+            'metric_date' => $metric_date,
+            'page_path'   => substr( sanitize_text_field( $page_path ), 0, 191 ),
+            'pageviews'   => max( 0, $pageviews ),
+            'source'      => substr( '' === $source ? 'ga4' : $source, 0, 50 ),
+        );
+    }
+
+    if ( empty( $valid_rows ) ) {
+        return array(
+            'inserted' => 0,
+            'skipped'  => $skipped,
+            'errors'   => 0,
+        );
+    }
+
+    foreach ( array_chunk( $valid_rows, $batch_size ) as $chunk ) {
+        $values_sql   = array();
+        $prepare_args = array();
+
+        foreach ( $chunk as $valid_row ) {
+            $values_sql[] = '( %s, %s, %d, %s, NOW(), NOW() )';
+
+            $prepare_args[] = $valid_row['metric_date'];
+            $prepare_args[] = $valid_row['page_path'];
+            $prepare_args[] = $valid_row['pageviews'];
+            $prepare_args[] = $valid_row['source'];
+        }
+
+        $query_sql = "INSERT INTO {$table} (metric_date, page_path, pageviews, source, created_at, updated_at) VALUES " . implode( ', ', $values_sql );
+
+        $prepared = $wpdb->prepare( $query_sql, ...$prepare_args );
+
+        if ( false === $prepared ) {
+            $errors += count( $chunk );
+            continue;
+        }
+
+        $result = $wpdb->query( $prepared );
+
+        if ( false === $result ) {
+            $errors += count( $chunk );
+            continue;
+        }
+
+        $inserted += count( $chunk );
+    }
+
+    return array(
+        'inserted' => $inserted,
+        'skipped'  => $skipped,
+        'errors'   => $errors,
+    );
 }
 
 /**
