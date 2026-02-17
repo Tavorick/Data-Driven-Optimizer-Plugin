@@ -718,6 +718,7 @@ function ddo_render_scheduler_status_block() {
         $last_start         = isset( $job_meta['last_start'] ) ? (int) $job_meta['last_start'] : 0;
         $last_success       = isset( $job_meta['last_success'] ) ? (int) $job_meta['last_success'] : 0;
         $last_error_message = isset( $job_meta['last_error_message'] ) ? (string) $job_meta['last_error_message'] : '';
+        $last_error_code    = isset( $job_meta['last_error_code'] ) ? (string) $job_meta['last_error_code'] : '';
         $last_duration      = isset( $job_meta['last_run_duration'] ) ? (float) $job_meta['last_run_duration'] : 0;
         $next_run           = wp_next_scheduled( $job_name );
         $expected_interval  = isset( $job_config['expected_interval'] ) ? (int) $job_config['expected_interval'] : HOUR_IN_SECONDS;
@@ -730,6 +731,7 @@ function ddo_render_scheduler_status_block() {
             'last_start',
             'last_success',
             'last_error_message',
+            'last_error_code',
             'last_duration',
             'next_run',
             'expected_interval',
@@ -773,6 +775,7 @@ function ddo_render_scheduler_status_block() {
                 <th><?php esc_html_e( 'Laatste run duur', 'data-driven-optimizer' ); ?></th>
                 <th><?php esc_html_e( 'Volgende geplande run', 'data-driven-optimizer' ); ?></th>
                 <th><?php esc_html_e( 'Laatste foutmelding', 'data-driven-optimizer' ); ?></th>
+                <th><?php esc_html_e( 'Error code', 'data-driven-optimizer' ); ?></th>
                 <th><?php esc_html_e( 'Status', 'data-driven-optimizer' ); ?></th>
                 <th><?php esc_html_e( 'Actie', 'data-driven-optimizer' ); ?></th>
             </tr>
@@ -792,6 +795,7 @@ function ddo_render_scheduler_status_block() {
                     <td><?php echo $item['last_duration'] > 0 ? esc_html( ddo_format_scheduler_duration_seconds( $item['last_duration'] ) ) : '&mdash;'; ?></td>
                     <td><?php echo $item['next_run'] ? esc_html( wp_date( 'Y-m-d H:i:s', (int) $item['next_run'] ) ) : esc_html__( 'Niet gepland', 'data-driven-optimizer' ); ?></td>
                     <td><?php echo '' !== $item['last_error_message'] ? esc_html( $item['last_error_message'] ) : '&mdash;'; ?></td>
+                    <td><?php echo '' !== $item['last_error_code'] ? esc_html( $item['last_error_code'] ) : '&mdash;'; ?></td>
                     <td>
                         <span class="ddo-scheduler-status-pill <?php echo esc_attr( $item['is_stale'] ? 'is-stale' : 'is-ok' ); ?>">
                             <span aria-hidden="true"><?php echo esc_html( $status_label ); ?></span>

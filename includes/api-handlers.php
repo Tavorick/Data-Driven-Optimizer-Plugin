@@ -7,6 +7,34 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+
+/**
+ * Runtime exception met expliciete DDO-foutcode.
+ */
+class DDO_Runtime_Exception extends RuntimeException {
+    /**
+     * @var string
+     */
+    protected $ddo_error_code = '';
+
+    /**
+     * @param string $message Foutmelding.
+     * @param string $ddo_error_code Semantische foutcode.
+     */
+    public function __construct( $message, $ddo_error_code ) {
+        $this->ddo_error_code = (string) $ddo_error_code;
+
+        parent::__construct( $message, 0 );
+    }
+
+    /**
+     * @return string
+     */
+    public function get_ddo_error_code() {
+        return $this->ddo_error_code;
+    }
+}
+
 /**
  * Registreer routes.
  */
@@ -715,10 +743,12 @@ function ddo_process_api_data_fetch() {
     $payload    = call_user_func( $service );
 
     if ( is_wp_error( $payload ) ) {
+        $payload_error_code = ddo_get_wp_error_code_safe( $payload );
+
         $payload = array(
             'processed_count' => 0,
             'errors_count'    => 1,
-            'error_code'      => ddo_get_wp_error_code_safe( $payload ),
+            'error_code'      => '' !== $payload_error_code ? $payload_error_code : 'ddo_api_data_fetch_failed',
         );
     }
 
@@ -743,10 +773,10 @@ function ddo_process_api_data_fetch() {
 
     if ( $result['errors_count'] > 0 ) {
         if ( 'ddo_ga4_missing_config' === $result['error_code'] ) {
-            throw new RuntimeException( 'API data fetch gestopt: GA4-configuratie is incompleet (Property ID en service account JSON/token zijn verplicht).', 0 );
+            throw new DDO_Runtime_Exception( 'API data fetch gestopt: GA4-configuratie is incompleet (Property ID en service account JSON/token zijn verplicht).', 'ddo_ga4_missing_config' );
         }
 
-        throw new RuntimeException( 'API data fetch failed.', 0 );
+        throw new DDO_Runtime_Exception( 'API data fetch failed.', '' !== $result['error_code'] ? $result['error_code'] : 'ddo_api_data_fetch_failed' );
     }
 
     ddo_log_scheduler_event( 'ddo_hourly_fetch', 'fetch-complete', 'info', $result );
