@@ -180,6 +180,69 @@ class ScheduledJobServicesTest extends TestCase {
         $this->assertSame( '[redacted]', $events[0]['context']['meta']['token'] );
     }
 
+
+    public function test_scheduler_metadata_keeps_rolling_window_for_last_10_runs(): void {
+        for ( $i = 0; $i < 12; $i++ ) {
+            ddo_record_scheduler_run_outcome( 'ddo_hourly_fetch', $i % 2 === 0 );
+        }
+
+        $metadata = ddo_get_scheduler_job_metadata();
+        $history  = $metadata['ddo_hourly_fetch']['run_history'];
+
+        $this->assertCount( 10, $history );
+        $this->assertFalse( $history[0]['success'] );
+        $this->assertTrue( $history[1]['success'] );
+    }
+
+    public function test_scheduler_health_kpis_calculate_statuses_correctly(): void {
+        $healthy = ddo_get_scheduler_job_health_kpis(
+            array(
+                'last_success' => 1735689600,
+                'run_history'  => array(
+                    array( 'success' => true ),
+                    array( 'success' => true ),
+                    array( 'success' => true ),
+                    array( 'success' => false ),
+                    array( 'success' => true ),
+                ),
+            )
+        );
+
+        $degraded = ddo_get_scheduler_job_health_kpis(
+            array(
+                'run_history' => array(
+                    array( 'success' => true ),
+                    array( 'success' => false ),
+                    array( 'success' => false ),
+                    array( 'success' => true ),
+                    array( 'success' => false ),
+                ),
+            )
+        );
+
+        $down = ddo_get_scheduler_job_health_kpis(
+            array(
+                'run_history' => array(
+                    array( 'success' => false ),
+                    array( 'success' => false ),
+                    array( 'success' => false ),
+                    array( 'success' => true ),
+                    array( 'success' => false ),
+                ),
+            )
+        );
+
+        $this->assertSame( 'healthy', $healthy['status'] );
+        $this->assertSame( 80.0, $healthy['success_rate'] );
+        $this->assertSame( 1735689600, $healthy['last_success'] );
+
+        $this->assertSame( 'degraded', $degraded['status'] );
+        $this->assertSame( 40.0, $degraded['success_rate'] );
+
+        $this->assertSame( 'down', $down['status'] );
+        $this->assertSame( 20.0, $down['success_rate'] );
+    }
+
     public function test_placeholder_actions_are_not_present_anymore(): void {
         $api_handlers = file_get_contents( dirname( __DIR__ ) . '/includes/api-handlers.php' );
         $ml_feedback  = file_get_contents( dirname( __DIR__ ) . '/includes/ml-feedback.php' );

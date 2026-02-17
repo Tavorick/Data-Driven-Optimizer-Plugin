@@ -54,6 +54,75 @@ function ddo_update_scheduler_job_metadata( $job_name, $updates ) {
  *
  * @return array
  */
+
+/**
+ * Voeg een run-resultaat toe aan rolling window metadata (laatste 10 runs).
+ *
+ * @param string $job_name Jobnaam.
+ * @param bool   $success  Of de run succesvol was.
+ */
+function ddo_record_scheduler_run_outcome( $job_name, $success ) {
+    $metadata = ddo_get_scheduler_job_metadata();
+    $current  = isset( $metadata[ $job_name ] ) && is_array( $metadata[ $job_name ] ) ? $metadata[ $job_name ] : array();
+    $history  = isset( $current['run_history'] ) && is_array( $current['run_history'] ) ? $current['run_history'] : array();
+
+    $history[] = array(
+        'timestamp' => time(),
+        'success'   => (bool) $success,
+    );
+
+    if ( count( $history ) > 10 ) {
+        $history = array_slice( $history, -10 );
+    }
+
+    ddo_update_scheduler_job_metadata(
+        $job_name,
+        array(
+            'run_history' => array_values( $history ),
+        )
+    );
+}
+
+/**
+ * Bereken health KPI's op basis van rolling window (laatste 10 runs).
+ *
+ * @param array $job_meta Job metadata.
+ * @return array
+ */
+function ddo_get_scheduler_job_health_kpis( $job_meta ) {
+    $job_meta     = is_array( $job_meta ) ? $job_meta : array();
+    $history      = isset( $job_meta['run_history'] ) && is_array( $job_meta['run_history'] ) ? array_slice( $job_meta['run_history'], -10 ) : array();
+    $total_runs   = count( $history );
+    $success_runs = 0;
+
+    foreach ( $history as $run ) {
+        if ( ! empty( $run['success'] ) ) {
+            $success_runs++;
+        }
+    }
+
+    $success_rate = $total_runs > 0 ? ( $success_runs / $total_runs ) * 100 : 0;
+    $last_success = isset( $job_meta['last_success'] ) ? (int) $job_meta['last_success'] : 0;
+
+    if ( 0 === $total_runs ) {
+        $status = 'down';
+    } elseif ( $success_rate >= 80 ) {
+        $status = 'healthy';
+    } elseif ( $success_rate >= 40 ) {
+        $status = 'degraded';
+    } else {
+        $status = 'down';
+    }
+
+    return array(
+        'total_runs'    => $total_runs,
+        'success_runs'  => $success_runs,
+        'success_rate'  => $success_rate,
+        'last_success'  => $last_success,
+        'status'        => $status,
+    );
+}
+
 function ddo_get_scheduler_observability_jobs() {
     return array(
         'ddo_hourly_fetch'    => array(
@@ -173,6 +242,8 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
             )
         );
 
+        ddo_record_scheduler_run_outcome( $job_name, true );
+
         ddo_log_scheduler_event(
             $job_name,
             'job-end',
@@ -197,6 +268,8 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
             )
         );
 
+        ddo_record_scheduler_run_outcome( $job_name, false );
+
         ddo_log_scheduler_event(
             $job_name,
             'job-error',
@@ -220,6 +293,8 @@ function ddo_execute_scheduled_job( $job_name, $callback ) {
                 'last_run_duration'  => round( $duration, 3 ),
             )
         );
+
+        ddo_record_scheduler_run_outcome( $job_name, false );
 
         ddo_log_scheduler_event(
             $job_name,

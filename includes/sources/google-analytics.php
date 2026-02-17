@@ -93,6 +93,47 @@ function ddo_classify_ga4_error_code( $response_code, $google_status ) {
 }
 
 /**
+ * Bepaal of een GA4 fout in aanmerking komt voor retry.
+ *
+ * @param int $response_code HTTP status code.
+ * @return bool
+ */
+function ddo_is_ga4_retryable_response_code( $response_code ) {
+    $response_code = (int) $response_code;
+
+    return 429 === $response_code || $response_code >= 500;
+}
+
+/**
+ * Wacht voor een retry met timeout-bewaking.
+ *
+ * @param int   $delay_seconds Aantal seconden backoff.
+ * @param float $deadline_ts   Absolute deadline als unix timestamp met millis.
+ * @return bool True wanneer de wachttijd is uitgevoerd, false wanneer deadline al verlopen is.
+ */
+function ddo_wait_for_ga4_retry( $delay_seconds, $deadline_ts ) {
+    $remaining = (float) $deadline_ts - microtime( true );
+
+    if ( $remaining <= 0 ) {
+        return false;
+    }
+
+    $sleep_seconds = min( max( 0, (int) $delay_seconds ), (int) floor( $remaining ) );
+
+    if ( $sleep_seconds <= 0 ) {
+        return false;
+    }
+
+    if ( defined( 'DDO_TEST_MODE' ) && DDO_TEST_MODE ) {
+        return true;
+    }
+
+    sleep( $sleep_seconds );
+
+    return true;
+}
+
+/**
  * Haal pageview-data op uit de GA4 Data API (RunReport).
  *
  * @param string $start_date Startdatum in Y-m-d.
@@ -171,6 +212,11 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
         'timeout' => 20,
     );
 
+    $max_retries     = 2;
+    $backoff_seconds = array( 1, 3 );
+    $request_timeout = isset( $request_base['timeout'] ) ? (int) $request_base['timeout'] : 20;
+    $deadline_ts     = microtime( true ) + max( 1, $request_timeout + array_sum( $backoff_seconds ) );
+
     $metric_names = array( 'screenPageViews', 'sessions' );
 
     foreach ( $metric_names as $metric_name ) {
@@ -193,7 +239,56 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
             )
         );
 
-        $http_response = wp_remote_post( $endpoint, $request_args );
+        $http_response = null;
+        $response_code = 0;
+        $raw_body      = '';
+        $decoded_body  = null;
+
+        for ( $attempt = 0; $attempt <= $max_retries; $attempt++ ) {
+            $remaining = max( 1, (int) ceil( $deadline_ts - microtime( true ) ) );
+
+            if ( $remaining <= 0 ) {
+                $http_response = new WP_Error( 'ddo_ga4_request_timeout', __( 'GA4 retry deadline exceeded.', 'data-driven-optimizer' ) );
+                break;
+            }
+
+            $request_args['timeout'] = min( $request_timeout, $remaining );
+            $http_response           = wp_remote_post( $endpoint, $request_args );
+
+            if ( is_wp_error( $http_response ) ) {
+                break;
+            }
+
+            $response_code = (int) wp_remote_retrieve_response_code( $http_response );
+            $raw_body      = (string) wp_remote_retrieve_body( $http_response );
+            $decoded_body  = json_decode( $raw_body, true );
+
+            if ( ddo_is_ga4_retryable_response_code( $response_code ) && $attempt < $max_retries ) {
+                $backoff = isset( $backoff_seconds[ $attempt ] ) ? (int) $backoff_seconds[ $attempt ] : end( $backoff_seconds );
+
+                ddo_log_scheduler_event(
+                    $job_name,
+                    'ga4-retry-scheduled',
+                    'warning',
+                    array(
+                        'metric'         => $metric_name,
+                        'response_code'  => $response_code,
+                        'retry_attempt'  => $attempt + 1,
+                        'retry_in'       => $backoff,
+                        'retry_max'      => $max_retries,
+                        'deadline_epoch' => (int) floor( $deadline_ts ),
+                    )
+                );
+
+                if ( ! ddo_wait_for_ga4_retry( $backoff, $deadline_ts ) ) {
+                    break;
+                }
+
+                continue;
+            }
+
+            break;
+        }
 
         if ( is_wp_error( $http_response ) ) {
             $error = new WP_Error( 'ddo_ga4_request_failed', __( 'GA4 request failed.', 'data-driven-optimizer' ) );
@@ -214,9 +309,6 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
             return $error;
         }
 
-        $response_code = (int) wp_remote_retrieve_response_code( $http_response );
-        $raw_body      = (string) wp_remote_retrieve_body( $http_response );
-        $decoded_body  = json_decode( $raw_body, true );
         if ( $response_code >= 400 ) {
             $google_error    = ddo_parse_google_error_payload( $decoded_body );
             $google_status   = isset( $google_error['status'] ) ? (string) $google_error['status'] : '';

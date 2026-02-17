@@ -11,6 +11,9 @@ if ( ! defined( 'ARRAY_A' ) ) {
 if ( ! defined( 'OPENSSL_RAW_DATA' ) ) {
     define( 'OPENSSL_RAW_DATA', 1 );
 }
+if ( ! defined( 'DDO_TEST_MODE' ) ) {
+    define( 'DDO_TEST_MODE', true );
+}
 
 global $ddo_test_state;
 $ddo_test_state = array(
