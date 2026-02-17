@@ -129,4 +129,57 @@ class GoogleAnalyticsSourceTest extends TestCase {
         $this->assertSame( 'ga4', $result['rows'][0]['source'] );
     }
 
+
+    public function test_fetch_google_pageviews_classifies_invalid_request_from_google_status(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['remote_post_queue'] = array(
+            array(
+                'response' => array( 'code' => 400 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'error' => array(
+                            'status'  => 'INVALID_ARGUMENT',
+                            'message' => 'Invalid date range format',
+                        ),
+                    )
+                ),
+            ),
+        );
+
+        $result = ddo_fetch_google_pageviews( '2026-01-09', '2026-01-10' );
+
+        $this->assertInstanceOf( WP_Error::class, $result );
+        $this->assertSame( 'ddo_ga4_invalid_request', $result->get_error_code() );
+    }
+
+    public function test_fetch_google_pageviews_logs_retry_context_for_quota_errors(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['remote_post_queue'] = array(
+            array(
+                'response' => array( 'code' => 429 ),
+                'body'     => wp_json_encode(
+                    array(
+                        'error' => array(
+                            'status'  => 'RESOURCE_EXHAUSTED',
+                            'message' => 'Quota exceeded',
+                        ),
+                    )
+                ),
+            ),
+        );
+
+        $result = ddo_fetch_google_pageviews( '2026-01-09', '2026-01-10' );
+        $events = ddo_get_recent_scheduler_events( 1 );
+
+        $this->assertInstanceOf( WP_Error::class, $result );
+        $this->assertSame( 'ddo_ga4_quota_exceeded', $result->get_error_code() );
+        $this->assertSame( 429, $events[0]['context']['response_code'] );
+        $this->assertSame( 'resource_exhausted', $events[0]['context']['google_status'] );
+        $this->assertSame( 'Quota exceeded', $events[0]['context']['google_message'] );
+        $this->assertTrue( $events[0]['context']['retryable'] );
+        $this->assertSame( 60, $events[0]['context']['suggested_retry_after'] );
+    }
+
 }

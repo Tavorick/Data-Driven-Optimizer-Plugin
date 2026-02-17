@@ -37,6 +37,62 @@ function ddo_get_wp_error_message_safe( $error ) {
 }
 
 /**
+ * Parse Google API errordetails uit response body.
+ *
+ * @param mixed $decoded_body Gedecodeerde response body.
+ * @return array
+ */
+function ddo_parse_google_error_payload( $decoded_body ) {
+    $google_error = array(
+        'code'    => 0,
+        'status'  => '',
+        'message' => '',
+    );
+
+    if ( ! is_array( $decoded_body ) || ! isset( $decoded_body['error'] ) || ! is_array( $decoded_body['error'] ) ) {
+        return $google_error;
+    }
+
+    $error_payload = $decoded_body['error'];
+
+    $google_error['code']    = isset( $error_payload['code'] ) ? (int) $error_payload['code'] : 0;
+    $google_error['status']  = isset( $error_payload['status'] ) ? sanitize_key( (string) $error_payload['status'] ) : '';
+    $google_error['message'] = isset( $error_payload['message'] ) ? sanitize_text_field( (string) $error_payload['message'] ) : '';
+
+    return $google_error;
+}
+
+/**
+ * Bepaal interne DDO errorcode op basis van GA4 response.
+ *
+ * @param int    $response_code HTTP status.
+ * @param string $google_status Google API status.
+ * @return string
+ */
+function ddo_classify_ga4_error_code( $response_code, $google_status ) {
+    $response_code = (int) $response_code;
+    $google_status = strtoupper( sanitize_key( (string) $google_status ) );
+
+    if ( 400 === $response_code || 'INVALID_ARGUMENT' === $google_status ) {
+        return 'ddo_ga4_invalid_request';
+    }
+
+    if ( 401 === $response_code || 403 === $response_code ) {
+        return 'ddo_ga4_auth_failed';
+    }
+
+    if ( 429 === $response_code || 'RESOURCE_EXHAUSTED' === $google_status ) {
+        return 'ddo_ga4_quota_exceeded';
+    }
+
+    if ( $response_code >= 500 || in_array( $google_status, array( 'INTERNAL', 'UNAVAILABLE', 'DEADLINE_EXCEEDED' ), true ) ) {
+        return 'ddo_ga4_upstream_transient';
+    }
+
+    return 'ddo_ga4_http_error';
+}
+
+/**
  * Haal pageview-data op uit de GA4 Data API (RunReport).
  *
  * @param string $start_date Startdatum in Y-m-d.
@@ -161,36 +217,50 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
         $response_code = (int) wp_remote_retrieve_response_code( $http_response );
         $raw_body      = (string) wp_remote_retrieve_body( $http_response );
         $decoded_body  = json_decode( $raw_body, true );
+        if ( $response_code >= 400 ) {
+            $google_error    = ddo_parse_google_error_payload( $decoded_body );
+            $google_status   = isset( $google_error['status'] ) ? (string) $google_error['status'] : '';
+            $google_message  = isset( $google_error['message'] ) ? (string) $google_error['message'] : '';
+            $internal_code   = ddo_classify_ga4_error_code( $response_code, $google_status );
+            $is_transient    = in_array( $internal_code, array( 'ddo_ga4_quota_exceeded', 'ddo_ga4_upstream_transient' ), true );
+            $error_message   = __( 'GA4 returned an HTTP error.', 'data-driven-optimizer' );
+            $log_event       = 'ga4-http-error';
 
-        if ( 401 === $response_code || 403 === $response_code ) {
-            $error = new WP_Error( 'ddo_ga4_auth_failed', __( 'GA4 authentication failed.', 'data-driven-optimizer' ) );
+            if ( 'ddo_ga4_invalid_request' === $internal_code ) {
+                $error_message = __( 'GA4 request is invalid.', 'data-driven-optimizer' );
+                $log_event     = 'ga4-invalid-request';
+            } elseif ( 'ddo_ga4_auth_failed' === $internal_code ) {
+                $error_message = __( 'GA4 authentication or permissions failed.', 'data-driven-optimizer' );
+                $log_event     = 'ga4-auth-failed';
+            } elseif ( 'ddo_ga4_quota_exceeded' === $internal_code ) {
+                $error_message = __( 'GA4 quota or rate limit exceeded.', 'data-driven-optimizer' );
+                $log_event     = 'ga4-quota-exceeded';
+            } elseif ( 'ddo_ga4_upstream_transient' === $internal_code ) {
+                $error_message = __( 'GA4 upstream transient failure.', 'data-driven-optimizer' );
+                $log_event     = 'ga4-upstream-transient';
+            }
 
-            ddo_log_scheduler_event(
-                $job_name,
-                'ga4-auth-failed',
-                'error',
-                array(
-                    'metric'        => $metric_name,
-                    'response_code' => $response_code,
-                    'error_code'    => ddo_get_wp_error_code_safe( $error ),
-                )
+            $error = new WP_Error( $internal_code, $error_message );
+
+            $context = array(
+                'metric'         => $metric_name,
+                'response_code'  => $response_code,
+                'google_status'  => $google_status,
+                'google_message' => $google_message,
+                'error_code'     => ddo_get_wp_error_code_safe( $error ),
             );
 
-            return $error;
-        }
-
-        if ( $response_code >= 400 ) {
-            $error = new WP_Error( 'ddo_ga4_http_error', __( 'GA4 returned an unexpected HTTP error.', 'data-driven-optimizer' ) );
+            if ( $is_transient ) {
+                $context['retry_advice']          = __( 'Retry with exponential backoff and jitter (start at 60s, max 15m).', 'data-driven-optimizer' );
+                $context['retryable']             = true;
+                $context['suggested_retry_after'] = 60;
+            }
 
             ddo_log_scheduler_event(
                 $job_name,
-                'ga4-http-error',
+                $log_event,
                 'error',
-                array(
-                    'metric'        => $metric_name,
-                    'response_code' => $response_code,
-                    'error_code'    => ddo_get_wp_error_code_safe( $error ),
-                )
+                $context
             );
 
             return $error;
