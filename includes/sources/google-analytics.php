@@ -57,7 +57,7 @@ function ddo_parse_google_error_payload( $decoded_body ) {
 
     $google_error['code']    = isset( $error_payload['code'] ) ? (int) $error_payload['code'] : 0;
     $google_error['status']  = isset( $error_payload['status'] ) ? sanitize_key( (string) $error_payload['status'] ) : '';
-    $google_error['message'] = isset( $error_payload['message'] ) ? sanitize_text_field( wp_strip_all_tags( (string) $error_payload['message'] ) ) : '';
+    $google_error['message'] = isset( $error_payload['message'] ) ? sanitize_text_field( (string) $error_payload['message'] ) : '';
 
     return $google_error;
 }
