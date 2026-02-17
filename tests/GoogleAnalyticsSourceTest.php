@@ -7,6 +7,7 @@ class GoogleAnalyticsSourceTest extends TestCase {
         global $ddo_test_state;
 
         $ddo_test_state['options']           = array();
+        $ddo_test_state['transients']        = array();
         $ddo_test_state['remote_post_queue'] = array();
         $ddo_test_state['remote_post_calls'] = array();
 
