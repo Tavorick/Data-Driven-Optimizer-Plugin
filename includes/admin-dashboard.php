@@ -16,6 +16,45 @@ function ddo_register_admin_menu() {
     add_action( 'admin_post_ddo_submit_concept', 'ddo_handle_concept_submit' );
     add_action( 'admin_post_ddo_run_scheduler_job', 'ddo_handle_run_scheduler_job' );
     add_action( 'wp_ajax_ddo_preview_concept', 'ddo_handle_preview_concept_ajax' );
+    add_action( 'admin_notices', 'ddo_render_ga4_runtime_config_notice' );
+}
+
+/**
+ * Toon runtime-configuratiefout voor GA4 als admin notice.
+ */
+function ddo_render_ga4_runtime_config_notice() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+
+    if ( ! is_object( $screen ) || empty( $screen->id ) || 'toplevel_page_ddo-dashboard' !== $screen->id ) {
+        return;
+    }
+
+    $notice_context = get_transient( 'ddo_ga4_runtime_config_notice' );
+
+    if ( ! is_array( $notice_context ) ) {
+        return;
+    }
+
+    delete_transient( 'ddo_ga4_runtime_config_notice' );
+
+    $details = sprintf(
+        ' (%1$s: %2$s, %3$s: %4$s, %5$s: %6$s)',
+        'property_id_present',
+        ! empty( $notice_context['property_id_present'] ) ? 'yes' : 'no',
+        'secret_present',
+        ! empty( $notice_context['secret_present'] ) ? 'yes' : 'no',
+        'mode',
+        isset( $notice_context['mode'] ) ? sanitize_text_field( (string) $notice_context['mode'] ) : 'unknown'
+    );
+
+    echo '<div class="notice notice-error is-dismissible"><p>';
+    echo esc_html__( 'GA4-configuratie ontbreekt of is ongeldig. Vul property ID + service account JSON in.', 'data-driven-optimizer' );
+    echo esc_html( $details );
+    echo '</p></div>';
 }
 
 /**
