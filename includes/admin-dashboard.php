@@ -852,6 +852,17 @@ function ddo_render_scheduler_status_block() {
                         <form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" class="ddo-scheduler-run-form">
                             <input type="hidden" name="action" value="ddo_run_scheduler_job" />
                             <input type="hidden" name="job_name" value="<?php echo esc_attr( $item['job_name'] ); ?>" />
+                            <?php if ( 'ddo_hourly_fetch' === $item['job_name'] ) : ?>
+                                <fieldset class="ddo-inline-source-selector">
+                                    <legend class="screen-reader-text"><?php esc_html_e( 'Selecteer bronnen voor handmatige fetch', 'data-driven-optimizer' ); ?></legend>
+                                    <?php foreach ( array_keys( ddo_get_data_source_registry() ) as $run_source_key ) : ?>
+                                        <label>
+                                            <input type="checkbox" name="source_keys[]" value="<?php echo esc_attr( $run_source_key ); ?>" />
+                                            <span><?php echo esc_html( $run_source_key ); ?></span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </fieldset>
+                            <?php endif; ?>
                             <?php wp_nonce_field( 'ddo_run_scheduler_job_' . $item['job_name'], 'ddo_run_scheduler_job_nonce' ); ?>
                             <?php submit_button( __( 'Run now', 'data-driven-optimizer' ), 'secondary small', 'submit', false ); ?>
                         </form>
@@ -918,6 +929,20 @@ function ddo_process_run_scheduler_job_request( $request ) {
         return array(
             'notice' => 'nonce_invalid',
             'job'    => $job_name,
+        );
+    }
+
+    if ( 'ddo_hourly_fetch' === $job_name ) {
+        $source_keys = isset( $request['source_keys'] ) && is_array( $request['source_keys'] ) ? $request['source_keys'] : array();
+        $source_keys = array_map( 'sanitize_key', $source_keys );
+        $source_keys = array_values( array_filter( array_unique( $source_keys ) ) );
+
+        ddo_run_hourly_fetch_job( $source_keys );
+
+        return array(
+            'notice'       => 'ok',
+            'job'          => $job_name,
+            'executedJobs' => array( $job_name ),
         );
     }
 

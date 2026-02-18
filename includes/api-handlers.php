@@ -616,11 +616,13 @@ function ddo_api_increment_rate_limit_bucket( $transient_key, $window_seconds, $
 /**
  * Handler voor periodieke data-fetches via scheduler.
  */
-function ddo_run_hourly_fetch_job() {
+function ddo_run_hourly_fetch_job( $requested_sources = array() ) {
+    $requested_sources = is_array( $requested_sources ) ? $requested_sources : array();
+
     ddo_execute_scheduled_job(
         'ddo_hourly_fetch',
-        function () {
-            return ddo_process_api_data_fetch();
+        function () use ( $requested_sources ) {
+            return ddo_process_api_data_fetch( $requested_sources );
         }
     );
 }
@@ -686,11 +688,236 @@ function ddo_capture_ga4_runtime_config_notice( $validation_error ) {
 }
 
 /**
+ * Haal geactiveerde source keys op, optioneel beperkt tot handmatige selectie.
+ *
+ * @param array $sources_registry Registry met bron-clients.
+ * @param array $requested_sources Optionele bronselectie vanuit handmatige run.
+ * @return array
+ */
+function ddo_get_active_source_keys( $sources_registry, $requested_sources = array() ) {
+    $sources_registry  = is_array( $sources_registry ) ? $sources_registry : array();
+    $registry_keys     = array_keys( $sources_registry );
+    $requested_sources = is_array( $requested_sources ) ? $requested_sources : array();
+    $requested_keys    = array();
+
+    foreach ( $requested_sources as $source_key ) {
+        $source_key = sanitize_key( (string) $source_key );
+
+        if ( '' !== $source_key ) {
+            $requested_keys[] = $source_key;
+        }
+    }
+
+    $requested_keys = array_values( array_unique( $requested_keys ) );
+
+    if ( ! empty( $requested_keys ) ) {
+        return array_values( array_intersect( $registry_keys, $requested_keys ) );
+    }
+
+    $configured_sources = get_option( 'ddo_active_data_sources', array() );
+    $configured_sources = is_array( $configured_sources ) ? $configured_sources : array();
+    $configured_keys    = array();
+
+    foreach ( $configured_sources as $source_key ) {
+        $source_key = sanitize_key( (string) $source_key );
+
+        if ( '' !== $source_key ) {
+            $configured_keys[] = $source_key;
+        }
+    }
+
+    $configured_keys = array_values( array_unique( $configured_keys ) );
+
+    if ( ! empty( $configured_keys ) ) {
+        $active_keys = array_values( array_intersect( $registry_keys, $configured_keys ) );
+
+        if ( ! empty( $active_keys ) ) {
+            return $active_keys;
+        }
+    }
+
+    return $registry_keys;
+}
+
+/**
+ * Vertaal bronfouten naar semantische error codes voor diagnose/dashboard.
+ *
+ * @param string         $stage Stage van ETL pipeline.
+ * @param WP_Error|mixed $error Foutobject of raw waarde.
+ * @return string
+ */
+function ddo_get_semantic_source_error_code( $stage, $error ) {
+    if ( ! is_wp_error( $error ) ) {
+        return 'ddo_source_unexpected_error';
+    }
+
+    $stage       = sanitize_key( (string) $stage );
+    $raw_code    = sanitize_key( ddo_get_wp_error_code_safe( $error ) );
+    $error_data  = $error->get_error_data( ddo_get_wp_error_code_safe( $error ) );
+    $status_code = is_array( $error_data ) && isset( $error_data['status'] ) ? (int) $error_data['status'] : 0;
+
+    if ( 429 === $status_code || false !== strpos( $raw_code, 'rate_limit' ) || false !== strpos( $raw_code, 'quota' ) ) {
+        return 'ddo_source_rate_limited';
+    }
+
+    if ( $status_code >= 500 && $status_code < 600 ) {
+        return 'ddo_source_upstream_transient';
+    }
+
+    if ( false !== strpos( $raw_code, 'timeout' ) || false !== strpos( $raw_code, 'transient' ) ) {
+        return 'ddo_source_upstream_transient';
+    }
+
+    if ( 'validate' === $stage || false !== strpos( $raw_code, 'missing_config' ) || false !== strpos( $raw_code, 'invalid_config' ) ) {
+        return 'ddo_source_config_invalid';
+    }
+
+    if ( 'normalize' === $stage ) {
+        return 'ddo_source_normalization_failed';
+    }
+
+    if ( 'store' === $stage ) {
+        return 'ddo_source_storage_failed';
+    }
+
+    if ( 'fetch' === $stage ) {
+        return 'ddo_source_fetch_failed';
+    }
+
+    return '' !== $raw_code ? $raw_code : 'ddo_source_unexpected_error';
+}
+
+/**
+ * Bepaal of een bronfout in aanmerking komt voor retry/backoff.
+ *
+ * @param WP_Error $error Foutobject.
+ * @return bool
+ */
+function ddo_is_source_transient_error( $error ) {
+    if ( ! is_wp_error( $error ) ) {
+        return false;
+    }
+
+    $raw_code    = sanitize_key( ddo_get_wp_error_code_safe( $error ) );
+    $error_data  = $error->get_error_data( ddo_get_wp_error_code_safe( $error ) );
+    $status_code = is_array( $error_data ) && isset( $error_data['status'] ) ? (int) $error_data['status'] : 0;
+
+    if ( 429 === $status_code || ( $status_code >= 500 && $status_code < 600 ) ) {
+        return true;
+    }
+
+    foreach ( array( 'quota', 'rate_limit', 'timeout', 'transient', 'upstream' ) as $needle ) {
+        if ( false !== strpos( $raw_code, $needle ) ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Voer fetch uit met retry/backoff op transient source-errors.
+ *
+ * @param DDO_Data_Source_Interface $source_client Bronclient.
+ * @param array                     $date_range Datumrange.
+ * @param string                    $source_key Bronkey.
+ * @param array                     $source_result Resultaatpayload dat wordt bijgewerkt.
+ * @return array|WP_Error
+ */
+function ddo_fetch_source_payload_with_retry( $source_client, $date_range, $source_key, &$source_result ) {
+    $max_attempts    = 3;
+    $backoff_seconds = array( 1, 2, 4 );
+    $deadline_ts     = microtime( true ) + 12;
+
+    for ( $attempt = 1; $attempt <= $max_attempts; $attempt++ ) {
+        $fetched_payload = $source_client->fetch( $date_range );
+
+        if ( ! is_wp_error( $fetched_payload ) ) {
+            $source_result['fetch_attempts'] = $attempt;
+
+            return $fetched_payload;
+        }
+
+        if ( $attempt >= $max_attempts || ! ddo_is_source_transient_error( $fetched_payload ) ) {
+            $source_result['fetch_attempts'] = $attempt;
+
+            return $fetched_payload;
+        }
+
+        $wait_seconds = isset( $backoff_seconds[ $attempt - 1 ] ) ? (int) $backoff_seconds[ $attempt - 1 ] : end( $backoff_seconds );
+
+        ddo_log_scheduler_event(
+            'ddo_hourly_fetch',
+            'source-fetch-retry',
+            'warning',
+            array(
+                'source'       => sanitize_key( (string) $source_key ),
+                'attempt'      => $attempt,
+                'max_attempts' => $max_attempts,
+                'retry_in'     => $wait_seconds,
+                'error_code'   => ddo_get_semantic_source_error_code( 'fetch', $fetched_payload ),
+            )
+        );
+
+        if ( microtime( true ) + $wait_seconds > $deadline_ts ) {
+            $source_result['fetch_attempts'] = $attempt;
+
+            return new WP_Error( 'ddo_source_fetch_retry_deadline', __( 'Source fetch retry deadline exceeded.', 'data-driven-optimizer' ) );
+        }
+
+        if ( ! ( defined( 'DDO_TEST_MODE' ) && DDO_TEST_MODE ) ) {
+            usleep( (int) round( $wait_seconds * 1000000 ) );
+        }
+    }
+
+    return new WP_Error( 'ddo_source_fetch_failed', __( 'Source fetch failed.', 'data-driven-optimizer' ) );
+}
+
+/**
+ * Werk scheduler metadata bij voor individuele source-run.
+ *
+ * @param string $source_key Source key.
+ * @param array  $source_result Resultaatpayload.
+ */
+function ddo_update_hourly_fetch_source_metadata( $source_key, $source_result ) {
+    $metadata         = ddo_get_scheduler_job_metadata();
+    $hourly_meta      = isset( $metadata['ddo_hourly_fetch'] ) && is_array( $metadata['ddo_hourly_fetch'] ) ? $metadata['ddo_hourly_fetch'] : array();
+    $hourly_sources   = isset( $hourly_meta['sources'] ) && is_array( $hourly_meta['sources'] ) ? $hourly_meta['sources'] : array();
+    $source_key       = sanitize_key( (string) $source_key );
+    $source_result    = is_array( $source_result ) ? $source_result : array();
+    $result_count     = isset( $source_result['result_count'] ) ? max( 0, (int) $source_result['result_count'] ) : 0;
+    $error_code       = isset( $source_result['error_code'] ) ? sanitize_key( (string) $source_result['error_code'] ) : '';
+    $last_source_meta = isset( $hourly_sources[ $source_key ] ) && is_array( $hourly_sources[ $source_key ] ) ? $hourly_sources[ $source_key ] : array();
+
+    $hourly_sources[ $source_key ] = array_merge(
+        $last_source_meta,
+        array(
+            'result_count'    => $result_count,
+            'last_error_code' => $error_code,
+            'last_run'        => time(),
+            'duration_ms'     => isset( $source_result['duration_ms'] ) ? max( 0, (int) $source_result['duration_ms'] ) : 0,
+            'fetch_attempts'  => isset( $source_result['fetch_attempts'] ) ? max( 1, (int) $source_result['fetch_attempts'] ) : 1,
+        )
+    );
+
+    if ( '' === $error_code ) {
+        $hourly_sources[ $source_key ]['last_success'] = time();
+    }
+
+    ddo_update_scheduler_job_metadata(
+        'ddo_hourly_fetch',
+        array(
+            'sources' => $hourly_sources,
+        )
+    );
+}
+
+/**
  * Default API client service voor geplande fetch jobs.
  *
  * @return array
  */
-function ddo_default_api_data_fetch_service() {
+function ddo_default_api_data_fetch_service( $requested_sources = array() ) {
     $metadata      = ddo_get_scheduler_job_metadata();
     $last_success  = isset( $metadata['ddo_hourly_fetch']['last_success'] ) ? (int) $metadata['ddo_hourly_fetch']['last_success'] : 0;
     $end_timestamp = time();
@@ -707,7 +934,10 @@ function ddo_default_api_data_fetch_service() {
     $total_errors_count = 0;
     $first_error_code = '';
 
-    foreach ( $sources as $source_key => $source_client ) {
+    $active_source_keys = ddo_get_active_source_keys( $sources, $requested_sources );
+
+    foreach ( $active_source_keys as $source_key ) {
+        $source_client  = isset( $sources[ $source_key ] ) ? $sources[ $source_key ] : null;
         $source_started = microtime( true );
         $source_result  = ddo_get_standard_source_result( $source_key );
 
@@ -716,6 +946,7 @@ function ddo_default_api_data_fetch_service() {
             $source_result['error_code']   = 'ddo_source_invalid_contract';
             $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
             $source_results[ $source_key ] = $source_result;
+            ddo_update_hourly_fetch_source_metadata( $source_key, $source_result );
             $total_errors_count++;
             if ( '' === $first_error_code ) {
                 $first_error_code = $source_result['error_code'];
@@ -731,9 +962,10 @@ function ddo_default_api_data_fetch_service() {
             }
 
             $source_result['errors_count'] = 1;
-            $source_result['error_code']   = ddo_get_wp_error_code_safe( $validation );
+            $source_result['error_code']   = ddo_get_semantic_source_error_code( 'validate', $validation );
             $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
             $source_results[ $source_key ] = $source_result;
+            ddo_update_hourly_fetch_source_metadata( $source_key, $source_result );
             $total_errors_count++;
             if ( '' === $first_error_code ) {
                 $first_error_code = $source_result['error_code'];
@@ -741,13 +973,14 @@ function ddo_default_api_data_fetch_service() {
             continue;
         }
 
-        $fetched_payload = $source_client->fetch( $date_range );
+        $fetched_payload = ddo_fetch_source_payload_with_retry( $source_client, $date_range, $source_key, $source_result );
 
         if ( is_wp_error( $fetched_payload ) ) {
             $source_result['errors_count'] = 1;
-            $source_result['error_code']   = ddo_get_wp_error_code_safe( $fetched_payload );
+            $source_result['error_code']   = ddo_get_semantic_source_error_code( 'fetch', $fetched_payload );
             $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
             $source_results[ $source_key ] = $source_result;
+            ddo_update_hourly_fetch_source_metadata( $source_key, $source_result );
             $total_errors_count++;
             if ( '' === $first_error_code ) {
                 $first_error_code = $source_result['error_code'];
@@ -759,9 +992,10 @@ function ddo_default_api_data_fetch_service() {
 
         if ( is_wp_error( $normalized_rows ) ) {
             $source_result['errors_count'] = 1;
-            $source_result['error_code']   = ddo_get_wp_error_code_safe( $normalized_rows );
+            $source_result['error_code']   = ddo_get_semantic_source_error_code( 'normalize', $normalized_rows );
             $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
             $source_results[ $source_key ] = $source_result;
+            ddo_update_hourly_fetch_source_metadata( $source_key, $source_result );
             $total_errors_count++;
             if ( '' === $first_error_code ) {
                 $first_error_code = $source_result['error_code'];
@@ -773,7 +1007,7 @@ function ddo_default_api_data_fetch_service() {
 
         if ( is_wp_error( $stored_result ) ) {
             $source_result['errors_count'] = 1;
-            $source_result['error_code']   = ddo_get_wp_error_code_safe( $stored_result );
+            $source_result['error_code']   = ddo_get_semantic_source_error_code( 'store', $stored_result );
         } else {
             $stored_result = is_array( $stored_result ) ? $stored_result : array();
             $storage_errors = isset( $stored_result['errors'] ) ? (int) $stored_result['errors'] : 0;
@@ -786,6 +1020,7 @@ function ddo_default_api_data_fetch_service() {
 
         $source_result['duration_ms'] = (int) round( ( microtime( true ) - $source_started ) * 1000 );
         $source_results[ $source_key ] = $source_result;
+        ddo_update_hourly_fetch_source_metadata( $source_key, $source_result );
         $total_result_count += $source_result['result_count'];
         $total_errors_count += $source_result['errors_count'];
 
@@ -809,10 +1044,26 @@ function ddo_default_api_data_fetch_service() {
  *
  * @return array
  */
-function ddo_process_api_data_fetch() {
+function ddo_process_api_data_fetch( $requested_sources = array() ) {
     $started_at = microtime( true );
     $service    = ddo_get_api_data_fetch_service();
-    $payload    = call_user_func( $service );
+    $requested_sources = is_array( $requested_sources ) ? $requested_sources : array();
+
+    $payload = null;
+
+    if ( is_array( $service ) && isset( $service[0], $service[1] ) && method_exists( $service[0], $service[1] ) ) {
+        $reflection = new ReflectionMethod( $service[0], $service[1] );
+        $payload    = $reflection->getNumberOfParameters() > 0
+            ? call_user_func( $service, $requested_sources )
+            : call_user_func( $service );
+    } elseif ( is_string( $service ) && function_exists( $service ) ) {
+        $reflection = new ReflectionFunction( $service );
+        $payload    = $reflection->getNumberOfParameters() > 0
+            ? call_user_func( $service, $requested_sources )
+            : call_user_func( $service );
+    } else {
+        $payload = call_user_func( $service, $requested_sources );
+    }
 
     if ( is_wp_error( $payload ) ) {
         $payload_error_code = ddo_get_wp_error_code_safe( $payload );
@@ -831,7 +1082,7 @@ function ddo_process_api_data_fetch() {
     $result_count = isset( $payload['result_count'] )
         ? (int) $payload['result_count']
         : ( isset( $payload['processed_count'] ) ? (int) $payload['processed_count'] : 0 );
-    $error_code   = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+    $error_code   = isset( $payload['error_code'] ) ? sanitize_key( (string) $payload['error_code'] ) : '';
     $errors_count = isset( $payload['errors_count'] )
         ? (int) $payload['errors_count']
         : ( '' !== $error_code ? 1 : 0 );
@@ -841,7 +1092,9 @@ function ddo_process_api_data_fetch() {
     $normalized_sources = array();
 
     foreach ( $sources as $source_key => $source_result ) {
-        $normalized_sources[ sanitize_key( (string) $source_key ) ] = ddo_normalize_source_result( $source_key, $source_result );
+        $normalized_source_key                      = sanitize_key( (string) $source_key );
+        $normalized_sources[ $normalized_source_key ] = ddo_normalize_source_result( $source_key, $source_result );
+        ddo_update_hourly_fetch_source_metadata( $normalized_source_key, $normalized_sources[ $normalized_source_key ] );
     }
 
     $result = array(
@@ -855,14 +1108,6 @@ function ddo_process_api_data_fetch() {
         'source'          => $source,
         'sources'         => $normalized_sources,
     );
-
-    if ( $result['errors_count'] > 0 ) {
-        if ( 'ddo_ga4_missing_config' === $result['error_code'] ) {
-            throw new DDO_Runtime_Exception( 'API data fetch gestopt: GA4-configuratie is incompleet (Property ID en service account JSON/token zijn verplicht).', 'ddo_ga4_missing_config' );
-        }
-
-        throw new DDO_Runtime_Exception( 'API data fetch failed.', '' !== $result['error_code'] ? $result['error_code'] : 'ddo_api_data_fetch_failed' );
-    }
 
     ddo_log_scheduler_event( 'ddo_hourly_fetch', 'fetch-complete', 'info', $result );
 

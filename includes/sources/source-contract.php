@@ -55,6 +55,7 @@ function ddo_get_standard_source_result( $source ) {
         'errors_count' => 0,
         'error_code'   => '',
         'duration_ms'  => 0,
+        'fetch_attempts' => 1,
         'source'       => sanitize_key( (string) $source ),
     );
 }
@@ -86,6 +87,10 @@ function ddo_normalize_source_result( $source, $result ) {
 
     if ( isset( $result['duration_ms'] ) ) {
         $normalized['duration_ms'] = max( 0, (int) $result['duration_ms'] );
+    }
+
+    if ( isset( $result['fetch_attempts'] ) ) {
+        $normalized['fetch_attempts'] = max( 1, (int) $result['fetch_attempts'] );
     }
 
     return $normalized;

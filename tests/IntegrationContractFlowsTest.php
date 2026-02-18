@@ -94,7 +94,7 @@ class IntegrationContractFlowsTest extends TestCase {
         );
 
         $this->assertSame( 'ok', $request_result['notice'] );
-        $this->assertSame( array( 'ddo_hourly_fetch' ), $ddo_test_state['actions_run'] );
+        $this->assertSame( array(), $ddo_test_state['actions_run'] );
 
         ddo_execute_scheduled_job(
             'ddo_hourly_fetch',
