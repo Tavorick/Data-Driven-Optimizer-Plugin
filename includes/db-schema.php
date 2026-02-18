@@ -17,6 +17,9 @@ function ddo_install_database_schema() {
 
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
+    $installed_version = get_option( 'ddo_schema_version', '' );
+    ddo_migrate_pageviews_facts_for_unique_index( $installed_version );
+
     $charset_collate = $wpdb->get_charset_collate();
 
     $table_fb_data = $wpdb->prefix . 'ddo_fb_data';
@@ -142,6 +145,34 @@ function ddo_install_database_schema() {
     ddo_migrate_feedback_scoring_model( $table_feedback );
 
     update_option( 'ddo_schema_version', DDO_SCHEMA_VERSION );
+}
+
+/**
+ * Verwijder legacy dubbele pageview-facts vóór unique index migratie.
+ *
+ * @param string $installed_version Geïnstalleerde schema versie.
+ * @return void
+ */
+function ddo_migrate_pageviews_facts_for_unique_index( $installed_version ) {
+    global $wpdb;
+
+    $installed_version = is_string( $installed_version ) ? trim( $installed_version ) : '';
+
+    if ( '' === $installed_version || version_compare( $installed_version, '1.5.0', '>=' ) ) {
+        return;
+    }
+
+    $table = $wpdb->prefix . 'ddo_pageviews_data';
+
+    // Houd per fact-key de nieuwste row en verwijder oudere duplicaten.
+    $wpdb->query(
+        "DELETE p1 FROM {$table} p1
+        INNER JOIN {$table} p2
+            ON p1.metric_date = p2.metric_date
+            AND p1.page_path = p2.page_path
+            AND p1.source = p2.source
+            AND p1.id < p2.id"
+    );
 }
 
 /**
