@@ -66,7 +66,7 @@ function ddo_is_sensitive_log_key( $key ) {
         return false;
     }
 
-    foreach ( array( 'api_key', 'apikey', 'secret', 'token', 'signature', 'hash', 'password', 'authorization' ) as $needle ) {
+    foreach ( array( 'api_key', 'apikey', 'secret', 'client_secret', 'private_key', 'token', 'refresh_token', 'bearer', 'signature', 'hash', 'password', 'authorization' ) as $needle ) {
         if ( false !== strpos( $key, $needle ) ) {
             return true;
         }
@@ -116,13 +116,21 @@ function ddo_redact_sensitive_log_message( $message ) {
     $patterns = array(
         '/(api[_-]?key\s*[=:]\s*)([^\s,;]+)/i',
         '/(token\s*[=:]\s*)([^\s,;]+)/i',
+        '/(refresh[_-]?token\s*[=:]\s*)([^\s,;]+)/i',
+        '/(client[_-]?secret\s*[=:]\s*)([^\s,;]+)/i',
+        '/(private[_-]?key\s*[=:]\s*)([^\s,;]+)/i',
         '/(secret\s*[=:]\s*)([^\s,;]+)/i',
         '/(signature\s*[=:]\s*)([^\s,;]+)/i',
         '/(authorization\s*[=:]\s*)([^\s,;]+)/i',
+        '/(bearer\s+)([A-Za-z0-9._\-]+)/i',
         '/\b[a-f0-9]{64}\b/i',
     );
 
     $replacements = array(
+        '$1[redacted]',
+        '$1[redacted]',
+        '$1[redacted]',
+        '$1[redacted]',
         '$1[redacted]',
         '$1[redacted]',
         '$1[redacted]',
