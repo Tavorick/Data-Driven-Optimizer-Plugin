@@ -55,6 +55,26 @@ class SettingsSanitizationTest extends TestCase {
         $this->assertSame( 'ddo_ga4_auth_mode', $last_error['setting'] );
     }
 
+
+    public function test_source_retention_days_sanitization_keeps_valid_numeric_values_per_source(): void {
+        $sanitized = ddo_sanitize_source_retention_days(
+            array(
+                'ga4'          => '90',
+                'facebook_ads' => '5',
+                'search-console' => 3651,
+                ''             => 40,
+            )
+        );
+
+        $this->assertSame(
+            array(
+                'ga4'            => 90,
+                'search-console' => 3650,
+            ),
+            $sanitized
+        );
+    }
+
     public function test_facebook_ads_secret_fields_are_encrypted(): void {
         $app_secret = ddo_sanitize_facebook_ads_app_secret( ' app-secret-123 ' );
         $token      = ddo_sanitize_facebook_ads_access_token( ' access-token-xyz ' );

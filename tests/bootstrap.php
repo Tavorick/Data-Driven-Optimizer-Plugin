@@ -372,6 +372,12 @@ class DDO_Fake_WPDB {
 
         if ( false !== strpos( $sql, 'INSERT INTO' ) && false !== strpos( $sql, 'ddo_pageviews_data' ) ) {
             $this->ingest_pageviews_rows_from_insert_sql( $sql );
+
+            return 1;
+        }
+
+        if ( false !== strpos( $sql, 'DELETE FROM' ) && false !== strpos( $sql, 'ddo_pageviews_data' ) ) {
+            return $this->delete_pageviews_rows_from_delete_sql( $sql );
         }
 
         return 1;
@@ -627,18 +633,69 @@ class DDO_Fake_WPDB {
         );
     }
 
+
+    private function delete_pageviews_rows_from_delete_sql( $sql ) {
+        if ( ! preg_match( "/source\s*=\s*'([^']+)'/", $sql, $source_match ) ) {
+            return 0;
+        }
+
+        if ( ! preg_match( "/metric_date\s*<\s*'([^']+)'/", $sql, $date_match ) ) {
+            return 0;
+        }
+
+        $source     = stripslashes( $source_match[1] );
+        $cutoff     = stripslashes( $date_match[1] );
+        $deleted    = 0;
+        $remaining  = array();
+
+        foreach ( $this->pageviews_rows as $row ) {
+            $row_source = isset( $row['source'] ) ? (string) $row['source'] : '';
+            $row_date   = isset( $row['metric_date'] ) ? (string) $row['metric_date'] : '';
+
+            if ( $row_source === $source && '' !== $row_date && $row_date < $cutoff ) {
+                $deleted++;
+                continue;
+            }
+
+            $remaining[] = $row;
+        }
+
+        $this->pageviews_rows = $remaining;
+
+        return $deleted;
+    }
+
     private function ingest_pageviews_rows_from_insert_sql( $sql ) {
         if ( ! preg_match_all( "/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*(\d+)\s*,\s*'([^']+)'\s*,\s*NOW\(\)\s*,\s*NOW\(\)\s*\)/", $sql, $matches, PREG_SET_ORDER ) ) {
             return;
         }
 
         foreach ( $matches as $match ) {
-            $this->pageviews_rows[] = array(
+            $row = array(
                 'metric_date' => stripslashes( $match[1] ),
                 'page_path'   => stripslashes( $match[2] ),
                 'pageviews'   => (int) $match[3],
                 'source'      => stripslashes( $match[4] ),
             );
+
+            $updated_existing = false;
+
+            foreach ( $this->pageviews_rows as $index => $existing_row ) {
+                if (
+                    isset( $existing_row['metric_date'], $existing_row['page_path'], $existing_row['source'] )
+                    && (string) $existing_row['metric_date'] === $row['metric_date']
+                    && (string) $existing_row['page_path'] === $row['page_path']
+                    && (string) $existing_row['source'] === $row['source']
+                ) {
+                    $this->pageviews_rows[ $index ] = $row;
+                    $updated_existing = true;
+                    break;
+                }
+            }
+
+            if ( ! $updated_existing ) {
+                $this->pageviews_rows[] = $row;
+            }
         }
     }
 

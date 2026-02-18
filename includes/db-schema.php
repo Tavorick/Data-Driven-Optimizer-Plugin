@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'DDO_SCHEMA_VERSION', '1.4.0' );
+define( 'DDO_SCHEMA_VERSION', '1.5.0' );
 
 /**
  * Create or update all plugin tables.
@@ -42,7 +42,8 @@ function ddo_install_database_schema() {
         KEY idx_ad_id (ad_id),
         KEY idx_status (status),
         KEY idx_campaign_date (campaign_id, metric_date),
-        KEY idx_ad_date (ad_id, metric_date)
+        KEY idx_ad_date (ad_id, metric_date),
+        UNIQUE KEY uniq_fb_fact (campaign_id, ad_id, metric_date)
     ) {$charset_collate};";
 
     $sql_ga_data = "CREATE TABLE {$table_ga_data} (
@@ -62,7 +63,8 @@ function ddo_install_database_schema() {
         KEY idx_ad_id (ad_id),
         KEY idx_status (status),
         KEY idx_campaign_date (campaign_id, metric_date),
-        KEY idx_ad_date (ad_id, metric_date)
+        KEY idx_ad_date (ad_id, metric_date),
+        UNIQUE KEY uniq_ga_fact (campaign_id, ad_id, metric_date)
     ) {$charset_collate};";
 
     $sql_concepts = "CREATE TABLE {$table_concepts} (
@@ -125,7 +127,10 @@ function ddo_install_database_schema() {
         KEY idx_metric_date_path (metric_date, page_path),
         KEY idx_metric_date_source (metric_date, source),
         KEY idx_page_path_date (page_path, metric_date),
-        KEY idx_metric_date_path_source (metric_date, page_path, source)
+        KEY idx_metric_date_path_source (metric_date, page_path, source),
+        KEY idx_source_metric_date (source, metric_date),
+        KEY idx_source_page_path (source, page_path),
+        UNIQUE KEY uniq_pageviews_fact (metric_date, page_path, source)
     ) {$charset_collate};";
 
     dbDelta( $sql_fb_data );
@@ -164,6 +169,8 @@ function ddo_store_pageviews_rows( $rows ) {
     $batch_size = 200;
     $valid_rows = array();
 
+    $deduped_rows = array();
+
     foreach ( $rows as $row ) {
         if ( ! is_array( $row ) ) {
             ++$skipped;
@@ -184,13 +191,18 @@ function ddo_store_pageviews_rows( $rows ) {
             continue;
         }
 
-        $valid_rows[] = array(
+        $normalized_row = array(
             'metric_date' => $metric_date,
             'page_path'   => substr( sanitize_text_field( $page_path ), 0, 191 ),
             'pageviews'   => max( 0, $pageviews ),
             'source'      => substr( '' === $source ? 'ga4' : $source, 0, 50 ),
         );
+
+        $dedupe_key                 = $normalized_row['metric_date'] . '|' . $normalized_row['page_path'] . '|' . $normalized_row['source'];
+        $deduped_rows[ $dedupe_key ] = $normalized_row;
     }
+
+    $valid_rows = array_values( $deduped_rows );
 
     if ( empty( $valid_rows ) ) {
         return array(
@@ -213,7 +225,7 @@ function ddo_store_pageviews_rows( $rows ) {
             $prepare_args[] = $valid_row['source'];
         }
 
-        $query_sql = "INSERT INTO {$table} (metric_date, page_path, pageviews, source, created_at, updated_at) VALUES " . implode( ', ', $values_sql );
+        $query_sql = "INSERT INTO {$table} (metric_date, page_path, pageviews, source, created_at, updated_at) VALUES " . implode( ', ', $values_sql ) . ' ON DUPLICATE KEY UPDATE pageviews = VALUES(pageviews), updated_at = NOW()';
 
         $prepared = $wpdb->prepare( $query_sql, ...$prepare_args );
 
@@ -237,6 +249,61 @@ function ddo_store_pageviews_rows( $rows ) {
         'skipped'  => $skipped,
         'errors'   => $errors,
     );
+}
+
+/**
+ * Geef retentie in dagen per bron terug.
+ *
+ * @param string $source_key Bronidentifier.
+ * @return int
+ */
+function ddo_get_source_retention_days( $source_key ) {
+    $source_key      = sanitize_key( (string) $source_key );
+    $retention_by_source = get_option( 'ddo_source_retention_days', array() );
+    $retention_by_source = is_array( $retention_by_source ) ? $retention_by_source : array();
+
+    if ( isset( $retention_by_source[ $source_key ] ) ) {
+        $days = (int) $retention_by_source[ $source_key ];
+        if ( $days >= 7 ) {
+            return min( 3650, $days );
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Verwijder oude pageview-data voor een specifieke bron op basis van retentie.
+ *
+ * @param string $source_key Bronidentifier.
+ * @return int
+ */
+function ddo_cleanup_pageviews_data_for_source( $source_key ) {
+    global $wpdb;
+
+    $retention_days = ddo_get_source_retention_days( $source_key );
+
+    if ( $retention_days < 7 ) {
+        return 0;
+    }
+
+    $table       = $wpdb->prefix . 'ddo_pageviews_data';
+    $source_key  = substr( sanitize_key( (string) $source_key ), 0, 50 );
+    $cutoff_date = gmdate( 'Y-m-d', time() - ( $retention_days * DAY_IN_SECONDS ) );
+
+    $query = $wpdb->prepare(
+        "DELETE FROM {$table} WHERE source = %s AND metric_date < %s",
+        $source_key,
+        $cutoff_date
+    );
+
+    if ( false === $query ) {
+        return 0;
+    }
+
+    $result = $wpdb->query( $query );
+
+    return false === $result ? 0 : max( 0, (int) $result );
 }
 
 /**

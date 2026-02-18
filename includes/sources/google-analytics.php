@@ -723,6 +723,12 @@ class DDO_GA4_Source implements DDO_Data_Source_Interface {
     }
 
     public function store( $normalized_rows ) {
-        return ddo_store_pageviews_rows( $normalized_rows );
+        $stored = ddo_store_pageviews_rows( $normalized_rows );
+
+        if ( is_array( $stored ) ) {
+            $stored['deleted'] = ddo_cleanup_pageviews_data_for_source( 'ga4' );
+        }
+
+        return $stored;
     }
 }
