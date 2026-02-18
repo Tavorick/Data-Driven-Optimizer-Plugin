@@ -690,3 +690,35 @@ function ddo_map_ga4_pageviews_response_to_rows( $response ) {
 
     return $rows;
 }
+
+/**
+ * GA4 reference implementation for shared source contract.
+ */
+class DDO_GA4_Source implements DDO_Data_Source_Interface {
+    public function validate_config() {
+        return ddo_validate_ga4_runtime_config();
+    }
+
+    public function fetch( $date_range ) {
+        $date_range = is_array( $date_range ) ? $date_range : array();
+        $start_date = isset( $date_range['start_date'] ) ? (string) $date_range['start_date'] : '';
+        $end_date   = isset( $date_range['end_date'] ) ? (string) $date_range['end_date'] : '';
+
+        return ddo_fetch_google_pageviews( $start_date, $end_date );
+    }
+
+    public function normalize( $raw_payload ) {
+        if ( is_wp_error( $raw_payload ) ) {
+            return $raw_payload;
+        }
+
+        $raw_payload = is_array( $raw_payload ) ? $raw_payload : array();
+        $rows        = isset( $raw_payload['rows'] ) && is_array( $raw_payload['rows'] ) ? $raw_payload['rows'] : array();
+
+        return $rows;
+    }
+
+    public function store( $normalized_rows ) {
+        return ddo_store_pageviews_rows( $normalized_rows );
+    }
+}

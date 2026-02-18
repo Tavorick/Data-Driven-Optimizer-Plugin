@@ -650,85 +650,157 @@ function ddo_get_api_data_fetch_service() {
 }
 
 /**
+ * Registreer GA4-configuratieprobleem voor admin notices.
+ *
+ * @param WP_Error $validation_error Validatiefout.
+ */
+function ddo_capture_ga4_runtime_config_notice( $validation_error ) {
+    if ( ! is_wp_error( $validation_error ) || 'ddo_ga4_missing_config' !== ddo_get_wp_error_code_safe( $validation_error ) ) {
+        return;
+    }
+
+    $validation_context = $validation_error->get_error_data( 'ddo_ga4_missing_config' );
+    $validation_context = is_array( $validation_context ) ? $validation_context : array();
+
+    ddo_log_scheduler_event(
+        'ddo_hourly_fetch',
+        'ga4-missing-config',
+        'error',
+        array(
+            'property_id_present' => ! empty( $validation_context['property_id_present'] ),
+            'secret_present'      => ! empty( $validation_context['secret_present'] ),
+            'mode'                => isset( $validation_context['mode'] ) ? (string) $validation_context['mode'] : 'unknown',
+            'error_code'          => ddo_get_wp_error_code_safe( $validation_error ),
+        )
+    );
+
+    set_transient(
+        'ddo_ga4_runtime_config_notice',
+        array(
+            'property_id_present' => ! empty( $validation_context['property_id_present'] ),
+            'secret_present'      => ! empty( $validation_context['secret_present'] ),
+            'mode'                => isset( $validation_context['mode'] ) ? (string) $validation_context['mode'] : 'unknown',
+        ),
+        HOUR_IN_SECONDS
+    );
+}
+
+/**
  * Default API client service voor geplande fetch jobs.
  *
  * @return array
  */
 function ddo_default_api_data_fetch_service() {
-    $metadata     = ddo_get_scheduler_job_metadata();
-    $last_success = isset( $metadata['ddo_hourly_fetch']['last_success'] ) ? (int) $metadata['ddo_hourly_fetch']['last_success'] : 0;
-
+    $metadata      = ddo_get_scheduler_job_metadata();
+    $last_success  = isset( $metadata['ddo_hourly_fetch']['last_success'] ) ? (int) $metadata['ddo_hourly_fetch']['last_success'] : 0;
     $end_timestamp = time();
     $start_timestamp = $last_success > 0 ? $last_success : ( $end_timestamp - DAY_IN_SECONDS );
 
-    $start_date = gmdate( 'Y-m-d', min( $start_timestamp, $end_timestamp ) );
-    $end_date   = gmdate( 'Y-m-d', $end_timestamp );
+    $date_range = array(
+        'start_date' => gmdate( 'Y-m-d', min( $start_timestamp, $end_timestamp ) ),
+        'end_date'   => gmdate( 'Y-m-d', $end_timestamp ),
+    );
 
-    $runtime_config_validation = ddo_validate_ga4_runtime_config();
+    $sources         = ddo_get_data_source_registry();
+    $source_results  = array();
+    $total_result_count = 0;
+    $total_errors_count = 0;
+    $first_error_code = '';
 
-    if ( is_wp_error( $runtime_config_validation ) ) {
-        $validation_context = $runtime_config_validation->get_error_data( 'ddo_ga4_missing_config' );
-        $validation_context = is_array( $validation_context ) ? $validation_context : array();
+    foreach ( $sources as $source_key => $source_client ) {
+        $source_started = microtime( true );
+        $source_result  = ddo_get_standard_source_result( $source_key );
 
-        ddo_log_scheduler_event(
-            'ddo_hourly_fetch',
-            'ga4-missing-config',
-            'error',
-            array(
-                'property_id_present' => ! empty( $validation_context['property_id_present'] ),
-                'secret_present'      => ! empty( $validation_context['secret_present'] ),
-                'mode'                => isset( $validation_context['mode'] ) ? (string) $validation_context['mode'] : 'unknown',
-                'error_code'          => ddo_get_wp_error_code_safe( $runtime_config_validation ),
-            )
-        );
+        if ( ! ( $source_client instanceof DDO_Data_Source_Interface ) ) {
+            $source_result['errors_count'] = 1;
+            $source_result['error_code']   = 'ddo_source_invalid_contract';
+            $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
+            $source_results[ $source_key ] = $source_result;
+            $total_errors_count++;
+            if ( '' === $first_error_code ) {
+                $first_error_code = $source_result['error_code'];
+            }
+            continue;
+        }
 
-        set_transient(
-            'ddo_ga4_runtime_config_notice',
-            array(
-                'property_id_present' => ! empty( $validation_context['property_id_present'] ),
-                'secret_present'      => ! empty( $validation_context['secret_present'] ),
-                'mode'                => isset( $validation_context['mode'] ) ? (string) $validation_context['mode'] : 'unknown',
-            ),
-            HOUR_IN_SECONDS
-        );
+        $validation = $source_client->validate_config();
 
-        return array(
-            'processed_count' => 0,
-            'records_fetched' => 0,
-            'records_stored'  => 0,
-            'errors_count'    => 1,
-            'error_code'      => ddo_get_wp_error_code_safe( $runtime_config_validation ),
-            'source'          => 'ga4',
-        );
+        if ( is_wp_error( $validation ) ) {
+            if ( 'ga4' === $source_key ) {
+                ddo_capture_ga4_runtime_config_notice( $validation );
+            }
+
+            $source_result['errors_count'] = 1;
+            $source_result['error_code']   = ddo_get_wp_error_code_safe( $validation );
+            $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
+            $source_results[ $source_key ] = $source_result;
+            $total_errors_count++;
+            if ( '' === $first_error_code ) {
+                $first_error_code = $source_result['error_code'];
+            }
+            continue;
+        }
+
+        $fetched_payload = $source_client->fetch( $date_range );
+
+        if ( is_wp_error( $fetched_payload ) ) {
+            $source_result['errors_count'] = 1;
+            $source_result['error_code']   = ddo_get_wp_error_code_safe( $fetched_payload );
+            $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
+            $source_results[ $source_key ] = $source_result;
+            $total_errors_count++;
+            if ( '' === $first_error_code ) {
+                $first_error_code = $source_result['error_code'];
+            }
+            continue;
+        }
+
+        $normalized_rows = $source_client->normalize( $fetched_payload );
+
+        if ( is_wp_error( $normalized_rows ) ) {
+            $source_result['errors_count'] = 1;
+            $source_result['error_code']   = ddo_get_wp_error_code_safe( $normalized_rows );
+            $source_result['duration_ms']  = (int) round( ( microtime( true ) - $source_started ) * 1000 );
+            $source_results[ $source_key ] = $source_result;
+            $total_errors_count++;
+            if ( '' === $first_error_code ) {
+                $first_error_code = $source_result['error_code'];
+            }
+            continue;
+        }
+
+        $stored_result = $source_client->store( $normalized_rows );
+
+        if ( is_wp_error( $stored_result ) ) {
+            $source_result['errors_count'] = 1;
+            $source_result['error_code']   = ddo_get_wp_error_code_safe( $stored_result );
+        } else {
+            $stored_result = is_array( $stored_result ) ? $stored_result : array();
+            $storage_errors = isset( $stored_result['errors'] ) ? (int) $stored_result['errors'] : 0;
+            $inserted_count = isset( $stored_result['inserted'] ) ? (int) $stored_result['inserted'] : count( $normalized_rows );
+
+            $source_result['result_count'] = max( 0, $inserted_count );
+            $source_result['errors_count'] = max( 0, $storage_errors );
+            $source_result['error_code']   = $storage_errors > 0 ? 'ddo_pageviews_store_failed' : '';
+        }
+
+        $source_result['duration_ms'] = (int) round( ( microtime( true ) - $source_started ) * 1000 );
+        $source_results[ $source_key ] = $source_result;
+        $total_result_count += $source_result['result_count'];
+        $total_errors_count += $source_result['errors_count'];
+
+        if ( '' === $first_error_code && '' !== $source_result['error_code'] ) {
+            $first_error_code = $source_result['error_code'];
+        }
     }
-
-    $fetch_result = ddo_fetch_google_pageviews( $start_date, $end_date );
-
-    if ( is_wp_error( $fetch_result ) ) {
-        return array(
-            'processed_count' => 0,
-            'records_fetched' => 0,
-            'records_stored'  => 0,
-            'errors_count'    => 1,
-            'error_code'      => ddo_get_wp_error_code_safe( $fetch_result ),
-            'source'          => 'ga4',
-        );
-    }
-
-    $rows           = isset( $fetch_result['rows'] ) && is_array( $fetch_result['rows'] ) ? $fetch_result['rows'] : array();
-    $records_fetched = isset( $fetch_result['fetched'] ) ? (int) $fetch_result['fetched'] : count( $rows );
-    $storage_result = ddo_store_pageviews_rows( $rows );
-    $records_stored = isset( $storage_result['inserted'] ) ? (int) $storage_result['inserted'] : 0;
-    $storage_errors = isset( $storage_result['errors'] ) ? (int) $storage_result['errors'] : 0;
 
     return array(
-        'processed_count' => max( 0, $records_stored ),
-        'records_fetched' => max( 0, $records_fetched ),
-        'records_stored'  => max( 0, $records_stored ),
-        'rows'            => $rows,
-        'errors_count'    => max( 0, $storage_errors ),
-        'error_code'      => $storage_errors > 0 ? 'ddo_pageviews_store_failed' : '',
-        'source'          => 'ga4',
+        'result_count'    => max( 0, $total_result_count ),
+        'processed_count' => max( 0, $total_result_count ),
+        'errors_count'    => max( 0, $total_errors_count ),
+        'error_code'      => $first_error_code,
+        'source'          => 'registry',
+        'sources'         => $source_results,
     );
 }
 
@@ -746,29 +818,42 @@ function ddo_process_api_data_fetch() {
         $payload_error_code = ddo_get_wp_error_code_safe( $payload );
 
         $payload = array(
-            'processed_count' => 0,
-            'errors_count'    => 1,
-            'error_code'      => '' !== $payload_error_code ? $payload_error_code : 'ddo_api_data_fetch_failed',
+            'result_count' => 0,
+            'errors_count' => 1,
+            'error_code'   => '' !== $payload_error_code ? $payload_error_code : 'ddo_api_data_fetch_failed',
+            'source'       => 'registry',
+            'sources'      => array(),
         );
     }
 
     $payload = is_array( $payload ) ? $payload : array();
 
-    $processed_count = isset( $payload['processed_count'] )
-        ? (int) $payload['processed_count']
-        : ( isset( $payload['records_fetched'] ) ? (int) $payload['records_fetched'] : 0 );
-    $error_code      = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
-    $errors_count    = isset( $payload['errors_count'] )
+    $result_count = isset( $payload['result_count'] )
+        ? (int) $payload['result_count']
+        : ( isset( $payload['processed_count'] ) ? (int) $payload['processed_count'] : 0 );
+    $error_code   = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+    $errors_count = isset( $payload['errors_count'] )
         ? (int) $payload['errors_count']
         : ( '' !== $error_code ? 1 : 0 );
+    $source       = isset( $payload['source'] ) ? sanitize_key( (string) $payload['source'] ) : 'registry';
+    $sources      = isset( $payload['sources'] ) && is_array( $payload['sources'] ) ? $payload['sources'] : array();
+
+    $normalized_sources = array();
+
+    foreach ( $sources as $source_key => $source_result ) {
+        $normalized_sources[ sanitize_key( (string) $source_key ) ] = ddo_normalize_source_result( $source_key, $source_result );
+    }
 
     $result = array(
         'job'             => 'ddo_hourly_fetch',
         'service'         => is_string( $service ) ? $service : 'custom-api-data-fetch-service',
-        'processed_count' => max( 0, $processed_count ),
+        'result_count'    => max( 0, $result_count ),
+        'processed_count' => max( 0, $result_count ),
         'errors_count'    => max( 0, $errors_count ),
         'duration_ms'     => (int) round( ( microtime( true ) - $started_at ) * 1000 ),
         'error_code'      => $error_code,
+        'source'          => $source,
+        'sources'         => $normalized_sources,
     );
 
     if ( $result['errors_count'] > 0 ) {

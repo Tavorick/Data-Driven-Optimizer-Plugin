@@ -24,7 +24,9 @@ require_once DDO_PLUGIN_DIR . 'includes/api-handlers.php';
 require_once DDO_PLUGIN_DIR . 'includes/ml-feedback.php';
 require_once DDO_PLUGIN_DIR . 'includes/code-introspect.php';
 require_once DDO_PLUGIN_DIR . 'includes/logger.php';
+require_once DDO_PLUGIN_DIR . 'includes/sources/source-contract.php';
 require_once DDO_PLUGIN_DIR . 'includes/sources/google-analytics.php';
+require_once DDO_PLUGIN_DIR . 'includes/sources/source-registry.php';
 require_once DDO_PLUGIN_DIR . 'includes/cron.php';
 require_once DDO_PLUGIN_DIR . 'includes/db-schema.php';
 

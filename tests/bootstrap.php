@@ -640,7 +640,9 @@ $wpdb = new DDO_Fake_WPDB();
 
 require_once dirname( __DIR__ ) . '/includes/settings.php';
 require_once dirname( __DIR__ ) . '/includes/logger.php';
+require_once dirname( __DIR__ ) . '/includes/sources/source-contract.php';
 require_once dirname( __DIR__ ) . '/includes/sources/google-analytics.php';
+require_once dirname( __DIR__ ) . '/includes/sources/source-registry.php';
 require_once dirname( __DIR__ ) . '/includes/api-handlers.php';
 require_once dirname( __DIR__ ) . '/includes/ml-feedback.php';
 require_once dirname( __DIR__ ) . '/includes/code-introspect.php';
