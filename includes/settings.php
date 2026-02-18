@@ -330,7 +330,10 @@ function ddo_maybe_migrate_api_keys_to_encrypted() {
         return;
     }
 
-    $options = ddo_get_secret_option_keys();
+    $options = array(
+        'ddo_api_key_primary',
+        'ddo_api_key_secondary',
+    );
 
     foreach ( $options as $option_name ) {
         $stored = get_option( $option_name, '' );
