@@ -351,4 +351,51 @@ class ScheduledJobServicesTest extends TestCase {
 
         ddo_process_code_introspection();
     }
+
+    public function test_default_api_data_fetch_service_iterates_registered_sources(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['options']['ddo_ga4_auth_mode'] = 'bearer_token';
+        $ddo_test_state['options']['ddo_api_key_primary'] = 'token-123';
+        $ddo_test_state['options']['ddo_ga4_property_id'] = '12345678';
+
+        $result = ddo_default_api_data_fetch_service();
+
+        $this->assertArrayHasKey( 'sources', $result );
+        $this->assertArrayHasKey( 'ga4', $result['sources'] );
+        $this->assertArrayHasKey( 'facebook_ads', $result['sources'] );
+        $this->assertArrayHasKey( 'search_console', $result['sources'] );
+        $this->assertArrayHasKey( 'result_count', $result['sources']['ga4'] );
+        $this->assertArrayHasKey( 'duration_ms', $result['sources']['ga4'] );
+    }
+
+    public function test_process_api_data_fetch_normalizes_source_metrics_shape(): void {
+        ddo_set_api_data_fetch_service(
+            function () {
+                return array(
+                    'result_count' => 5,
+                    'errors_count' => 0,
+                    'source'       => 'registry',
+                    'sources'      => array(
+                        'ga4' => array(
+                            'result_count' => 5,
+                            'errors_count' => 0,
+                            'error_code'   => '',
+                            'duration_ms'  => 12,
+                            'source'       => 'ga4',
+                        ),
+                    ),
+                );
+            }
+        );
+
+        $result = ddo_process_api_data_fetch();
+
+        $this->assertSame( 5, $result['result_count'] );
+        $this->assertSame( 5, $result['processed_count'] );
+        $this->assertSame( 'registry', $result['source'] );
+        $this->assertSame( 'ga4', $result['sources']['ga4']['source'] );
+        $this->assertArrayHasKey( 'duration_ms', $result['sources']['ga4'] );
+    }
+
 }
