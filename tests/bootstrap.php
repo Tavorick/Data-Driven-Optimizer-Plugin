@@ -102,6 +102,9 @@ function __( $text, $domain = null ) {
 function add_action() {}
 function add_filter() {}
 function register_setting() {}
+function dbDelta( $sql ) {
+    return $sql;
+}
 
 function add_settings_error( $setting, $code, $message, $type = 'error' ) {
     global $ddo_test_state;
@@ -354,6 +357,10 @@ class DDO_Fake_WPDB {
     public $prepared = array();
     public $select_queries = array();
     public $pageviews_rows = array();
+
+    public function get_charset_collate() {
+        return '';
+    }
 
     public function insert( $table, $data ) {
         if ( false !== strpos( $table, 'ddo_feedback' ) ) {

@@ -15,7 +15,13 @@ define( 'DDO_SCHEMA_VERSION', '1.5.0' );
 function ddo_install_database_schema() {
     global $wpdb;
 
-    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    if ( ! function_exists( 'dbDelta' ) ) {
+        $upgrade_file = ABSPATH . 'wp-admin/includes/upgrade.php';
+
+        if ( file_exists( $upgrade_file ) ) {
+            require_once $upgrade_file;
+        }
+    }
 
     $installed_version = get_option( 'ddo_schema_version', '' );
     ddo_migrate_pageviews_facts_for_unique_index( $installed_version );
