@@ -79,4 +79,27 @@ class SettingsSanitizationTest extends TestCase {
         $this->assertStringNotContainsString( 'super-token', $redacted );
     }
 
+
+    public function test_search_console_oauth_reference_is_encrypted_and_reused_when_empty(): void {
+        $encrypted = ddo_sanitize_search_console_oauth_reference( ' oauth-ref-123 ' );
+
+        $this->assertStringStartsWith( DDO_ENCRYPTED_SECRET_PREFIX, $encrypted );
+        $this->assertSame( 'oauth-ref-123', ddo_decrypt_secret( $encrypted ) );
+
+        update_option( 'ddo_search_console_oauth_reference', $encrypted );
+        $this->assertSame( $encrypted, ddo_sanitize_search_console_oauth_reference( '' ) );
+    }
+
+    public function test_migrate_source_settings_moves_legacy_search_console_token_ref_to_new_key(): void {
+        update_option( 'ddo_search_console_oauth_token_ref', 'legacy-token-ref' );
+
+        ddo_maybe_migrate_source_settings();
+
+        $migrated = get_option( 'ddo_search_console_oauth_reference', '' );
+
+        $this->assertStringStartsWith( DDO_ENCRYPTED_SECRET_PREFIX, $migrated );
+        $this->assertSame( 'legacy-token-ref', ddo_decrypt_secret( $migrated ) );
+    }
+
+
 }
