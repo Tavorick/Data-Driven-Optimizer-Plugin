@@ -121,12 +121,14 @@ function ddo_redact_sensitive_log_message( $message ) {
         '/(private[_-]?key\s*[=:]\s*)([^\s,;]+)/i',
         '/(secret\s*[=:]\s*)([^\s,;]+)/i',
         '/(signature\s*[=:]\s*)([^\s,;]+)/i',
+        '/(authorization\s*[=:]\s*bearer\s+)([^\s,;]+)/i',
         '/(authorization\s*[=:]\s*)([^\s,;]+)/i',
         '/(bearer\s+)([A-Za-z0-9._\-]+)/i',
         '/\b[a-f0-9]{64}\b/i',
     );
 
     $replacements = array(
+        '$1[redacted]',
         '$1[redacted]',
         '$1[redacted]',
         '$1[redacted]',
