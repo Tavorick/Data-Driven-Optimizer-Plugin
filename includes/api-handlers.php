@@ -1082,7 +1082,7 @@ function ddo_process_api_data_fetch( $requested_sources = array() ) {
     $result_count = isset( $payload['result_count'] )
         ? (int) $payload['result_count']
         : ( isset( $payload['processed_count'] ) ? (int) $payload['processed_count'] : 0 );
-    $error_code   = isset( $payload['error_code'] ) ? (string) $payload['error_code'] : '';
+    $error_code   = isset( $payload['error_code'] ) ? sanitize_key( (string) $payload['error_code'] ) : '';
     $errors_count = isset( $payload['errors_count'] )
         ? (int) $payload['errors_count']
         : ( '' !== $error_code ? 1 : 0 );
@@ -1092,7 +1092,9 @@ function ddo_process_api_data_fetch( $requested_sources = array() ) {
     $normalized_sources = array();
 
     foreach ( $sources as $source_key => $source_result ) {
-        $normalized_sources[ sanitize_key( (string) $source_key ) ] = ddo_normalize_source_result( $source_key, $source_result );
+        $normalized_source_key                      = sanitize_key( (string) $source_key );
+        $normalized_sources[ $normalized_source_key ] = ddo_normalize_source_result( $source_key, $source_result );
+        ddo_update_hourly_fetch_source_metadata( $normalized_source_key, $normalized_sources[ $normalized_source_key ] );
     }
 
     $result = array(
