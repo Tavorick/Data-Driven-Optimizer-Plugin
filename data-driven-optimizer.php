@@ -55,6 +55,7 @@ function ddo_activate_plugin() {
     }
 
     ddo_maybe_migrate_api_keys_to_encrypted();
+    ddo_maybe_migrate_source_settings();
 
     $legacy_options = get_option( 'ddo_options', array() );
 
@@ -79,6 +80,7 @@ register_deactivation_hook( DDO_PLUGIN_FILE, 'ddo_deactivate_plugin' );
 function ddo_init_plugin() {
     ddo_maybe_upgrade_database_schema();
     ddo_maybe_migrate_api_keys_to_encrypted();
+    ddo_maybe_migrate_source_settings();
     ddo_register_settings();
     ddo_register_admin_menu();
     ddo_register_api_routes();

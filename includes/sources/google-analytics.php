@@ -164,8 +164,9 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
 
     $property_id      = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
     $service_secret   = ddo_get_secret_option( 'ddo_ga4_service_account_json' );
+    $ga4_bearer_token = ddo_get_secret_option( 'ddo_ga4_bearer_token' );
     $legacy_api_token = ddo_get_api_key( 'ddo_api_key_primary' );
-    $access_token     = ddo_get_ga4_access_token( $service_secret, $legacy_api_token );
+    $access_token     = ddo_get_ga4_access_token( $service_secret, '' !== trim( (string) $ga4_bearer_token ) ? $ga4_bearer_token : $legacy_api_token );
 
     if ( is_wp_error( $access_token ) ) {
         ddo_log_scheduler_event(
@@ -191,6 +192,7 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
             array(
                 'property_id_present'      => '' !== $property_id,
                 'service_account_present'  => '' !== $service_secret,
+                'ga4_bearer_token_present' => '' !== trim( (string) $ga4_bearer_token ),
                 'legacy_api_token_present' => '' !== $legacy_api_token,
                 'error_code'               => ddo_get_wp_error_code_safe( $error ),
             )
@@ -414,11 +416,13 @@ function ddo_fetch_google_pageviews( $start_date, $end_date ) {
 function ddo_validate_ga4_runtime_config() {
     $property_id      = sanitize_text_field( (string) get_option( 'ddo_ga4_property_id', '' ) );
     $service_secret   = ddo_get_secret_option( 'ddo_ga4_service_account_json' );
+    $ga4_bearer_token = ddo_get_secret_option( 'ddo_ga4_bearer_token' );
     $legacy_api_token = ddo_get_api_key( 'ddo_api_key_primary' );
     $auth_mode        = ddo_get_ga4_auth_mode();
 
     $property_id      = is_string( $property_id ) ? trim( $property_id ) : '';
     $service_secret   = is_string( $service_secret ) ? trim( $service_secret ) : '';
+    $ga4_bearer_token = is_string( $ga4_bearer_token ) ? trim( $ga4_bearer_token ) : '';
     $legacy_api_token = is_string( $legacy_api_token ) ? trim( $legacy_api_token ) : '';
 
     $context = array(
@@ -439,7 +443,7 @@ function ddo_validate_ga4_runtime_config() {
         } elseif ( empty( $credentials['client_email'] ) || empty( $credentials['private_key'] ) ) {
             return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie is incompleet. Vul property ID + service account JSON in.', 'data-driven-optimizer' ), $context );
         }
-    } elseif ( '' === $legacy_api_token ) {
+    } elseif ( '' === $ga4_bearer_token && '' === $legacy_api_token ) {
         return new WP_Error( 'ddo_ga4_missing_config', __( 'GA4-configuratie mist bearer token.', 'data-driven-optimizer' ), $context );
     }
 

@@ -147,7 +147,17 @@ function ddo_render_admin_page() {
         <?php if ( function_exists( 'settings_errors' ) ) : ?>
             <?php settings_errors( 'ddo_messages' ); ?>
             <?php settings_errors( 'ddo_ga4_property_id' ); ?>
+            <?php settings_errors( 'ddo_ga4_auth_mode' ); ?>
             <?php settings_errors( 'ddo_ga4_service_account_json' ); ?>
+            <?php settings_errors( 'ddo_ga4_bearer_token' ); ?>
+            <?php settings_errors( 'ddo_facebook_ads_app_id' ); ?>
+            <?php settings_errors( 'ddo_facebook_ads_app_secret' ); ?>
+            <?php settings_errors( 'ddo_facebook_ads_access_token' ); ?>
+            <?php settings_errors( 'ddo_facebook_ads_ad_account_id' ); ?>
+            <?php settings_errors( 'ddo_search_console_site_url' ); ?>
+            <?php settings_errors( 'ddo_search_console_oauth_client_id' ); ?>
+            <?php settings_errors( 'ddo_search_console_oauth_client_secret' ); ?>
+            <?php settings_errors( 'ddo_search_console_oauth_reference' ); ?>
         <?php endif; ?>
         <?php ddo_render_scheduler_action_notice(); ?>
 

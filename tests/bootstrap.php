@@ -29,6 +29,7 @@ $ddo_test_state = array(
     'json_response'     => null,
     'remote_post_queue' => array(),
     'remote_post_calls' => array(),
+    'settings_errors'  => array(),
 );
 
 class DDO_Test_Json_Response_Exception extends RuntimeException {
@@ -101,6 +102,21 @@ function __( $text, $domain = null ) {
 function add_action() {}
 function add_filter() {}
 function register_setting() {}
+
+function add_settings_error( $setting, $code, $message, $type = 'error' ) {
+    global $ddo_test_state;
+
+    if ( ! isset( $ddo_test_state['settings_errors'] ) || ! is_array( $ddo_test_state['settings_errors'] ) ) {
+        $ddo_test_state['settings_errors'] = array();
+    }
+
+    $ddo_test_state['settings_errors'][] = array(
+        'setting' => (string) $setting,
+        'code'    => (string) $code,
+        'message' => (string) $message,
+        'type'    => (string) $type,
+    );
+}
 function add_settings_section() {}
 function add_settings_field() {}
 function checked( $checked, $current = true, $display = true ) {
