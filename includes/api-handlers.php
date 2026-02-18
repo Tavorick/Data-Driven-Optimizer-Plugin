@@ -1047,7 +1047,23 @@ function ddo_default_api_data_fetch_service( $requested_sources = array() ) {
 function ddo_process_api_data_fetch( $requested_sources = array() ) {
     $started_at = microtime( true );
     $service    = ddo_get_api_data_fetch_service();
-    $payload    = call_user_func( $service, $requested_sources );
+    $requested_sources = is_array( $requested_sources ) ? $requested_sources : array();
+
+    $payload = null;
+
+    if ( is_array( $service ) && isset( $service[0], $service[1] ) && method_exists( $service[0], $service[1] ) ) {
+        $reflection = new ReflectionMethod( $service[0], $service[1] );
+        $payload    = $reflection->getNumberOfParameters() > 0
+            ? call_user_func( $service, $requested_sources )
+            : call_user_func( $service );
+    } elseif ( is_string( $service ) && function_exists( $service ) ) {
+        $reflection = new ReflectionFunction( $service );
+        $payload    = $reflection->getNumberOfParameters() > 0
+            ? call_user_func( $service, $requested_sources )
+            : call_user_func( $service );
+    } else {
+        $payload = call_user_func( $service, $requested_sources );
+    }
 
     if ( is_wp_error( $payload ) ) {
         $payload_error_code = ddo_get_wp_error_code_safe( $payload );
