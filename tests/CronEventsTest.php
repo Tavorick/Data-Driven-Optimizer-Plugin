@@ -168,7 +168,7 @@ class CronEventsTest extends TestCase {
 
 
 
-    public function test_execute_scheduled_job_stores_non_zero_error_code_for_failed_api_fetch(): void {
+    public function test_execute_scheduled_job_keeps_source_error_code_in_last_result_for_partial_failure(): void {
         global $ddo_test_state;
 
         ddo_set_api_data_fetch_service(
@@ -185,10 +185,10 @@ class CronEventsTest extends TestCase {
 
         $metadata = $ddo_test_state['options']['ddo_scheduler_job_metadata']['ddo_hourly_fetch'] ?? array();
 
-        $this->assertArrayHasKey( 'last_error_code', $metadata );
-        $this->assertNotSame( '', $metadata['last_error_code'] );
-        $this->assertNotSame( '0', (string) $metadata['last_error_code'] );
-        $this->assertSame( 'ddo_ga4_upstream_transient', $metadata['last_error_code'] );
+        $this->assertSame( '', $metadata['last_error_code'] );
+        $this->assertArrayHasKey( 'last_result', $metadata );
+        $this->assertSame( 'ddo_ga4_upstream_transient', $metadata['last_result']['error_code'] );
+        $this->assertSame( 1, $metadata['last_result']['errors_count'] );
     }
 
     public function test_run_scheduler_job_request_rejects_bulk_when_nonce_invalid(): void {
