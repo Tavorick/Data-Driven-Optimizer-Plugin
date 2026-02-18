@@ -81,6 +81,16 @@ function ddo_register_settings_fields() {
         )
     );
 
+    register_setting(
+        'ddo_settings_group',
+        'ddo_source_retention_days',
+        array(
+            'type'              => 'array',
+            'sanitize_callback' => 'ddo_sanitize_source_retention_days',
+            'default'           => array(),
+        )
+    );
+
     register_setting( 'ddo_settings_group', 'ddo_ga4_property_id', array( 'type' => 'string', 'sanitize_callback' => 'ddo_sanitize_ga4_property_id', 'default' => '' ) );
     register_setting( 'ddo_settings_group', 'ddo_ga4_auth_mode', array( 'type' => 'string', 'sanitize_callback' => 'ddo_sanitize_ga4_auth_mode', 'default' => 'bearer_token' ) );
     register_setting( 'ddo_settings_group', 'ddo_ga4_service_account_json', array( 'type' => 'string', 'sanitize_callback' => 'ddo_sanitize_ga4_service_account_json', 'default' => '' ) );
@@ -159,6 +169,38 @@ function ddo_sanitize_feedback_retention_days( $value ) {
     }
 
     return min( 3650, $days );
+}
+
+/**
+ * Sanitize retentie-instellingen per databron.
+ *
+ * @param mixed $value Ruwe input.
+ * @return array
+ */
+function ddo_sanitize_source_retention_days( $value ) {
+    if ( ! is_array( $value ) ) {
+        return array();
+    }
+
+    $sanitized = array();
+
+    foreach ( $value as $source_key => $days ) {
+        $source_key = sanitize_key( (string) $source_key );
+
+        if ( '' === $source_key ) {
+            continue;
+        }
+
+        $days = (int) absint( $days );
+
+        if ( $days < 7 ) {
+            continue;
+        }
+
+        $sanitized[ $source_key ] = min( 3650, $days );
+    }
+
+    return $sanitized;
 }
 
 /**
