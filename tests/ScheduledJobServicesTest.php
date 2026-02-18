@@ -49,8 +49,9 @@ class ScheduledJobServicesTest extends TestCase {
 
         $metadata = ddo_get_scheduler_job_metadata();
 
-        $this->assertSame( 'API data fetch failed.', $metadata['ddo_hourly_fetch']['last_error_message'] );
-        $this->assertArrayNotHasKey( 'last_result', $metadata['ddo_hourly_fetch'] );
+        $this->assertSame( '', $metadata['ddo_hourly_fetch']['last_error_message'] );
+        $this->assertSame( 2, $metadata['ddo_hourly_fetch']['last_result']['errors_count'] );
+        $this->assertSame( 'api_rate_limit', $metadata['ddo_hourly_fetch']['last_result']['error_code'] );
     }
 
 
@@ -270,20 +271,22 @@ class ScheduledJobServicesTest extends TestCase {
         $this->assertArrayHasKey( 'duration_ms', $result );
     }
 
-    public function test_process_api_data_fetch_bubbles_error_exception(): void {
+    public function test_process_api_data_fetch_keeps_partial_success_without_exception(): void {
         ddo_set_api_data_fetch_service(
             function () {
                 return array(
                     'processed_count' => 12,
                     'errors_count'    => 1,
+                    'error_code'      => 'ddo_source_fetch_failed',
                 );
             }
         );
 
-        $this->expectException( RuntimeException::class );
-        $this->expectExceptionMessage( 'API data fetch failed.' );
+        $result = ddo_process_api_data_fetch();
 
-        ddo_process_api_data_fetch();
+        $this->assertSame( 12, $result['processed_count'] );
+        $this->assertSame( 1, $result['errors_count'] );
+        $this->assertSame( 'ddo_source_fetch_failed', $result['error_code'] );
     }
 
     public function test_process_ml_feedback_retrain_returns_structured_result(): void {
@@ -398,4 +401,41 @@ class ScheduledJobServicesTest extends TestCase {
         $this->assertArrayHasKey( 'duration_ms', $result['sources']['ga4'] );
     }
 
+    public function test_run_hourly_fetch_job_stores_source_level_scheduler_metadata(): void {
+        ddo_set_api_data_fetch_service(
+            function () {
+                return array(
+                    'result_count' => 3,
+                    'errors_count' => 1,
+                    'error_code'   => 'ddo_source_fetch_failed',
+                    'source'       => 'registry',
+                    'sources'      => array(
+                        'ga4' => array(
+                            'result_count' => 3,
+                            'errors_count' => 0,
+                            'error_code'   => '',
+                            'duration_ms'  => 11,
+                            'source'       => 'ga4',
+                        ),
+                        'facebook_ads' => array(
+                            'result_count' => 0,
+                            'errors_count' => 1,
+                            'error_code'   => 'ddo_source_fetch_failed',
+                            'duration_ms'  => 9,
+                            'source'       => 'facebook_ads',
+                            'fetch_attempts' => 2,
+                        ),
+                    ),
+                );
+            }
+        );
+
+        ddo_run_hourly_fetch_job();
+
+        $metadata = ddo_get_scheduler_job_metadata();
+
+        $this->assertSame( 3, $metadata['ddo_hourly_fetch']['sources']['ga4']['result_count'] );
+        $this->assertSame( 'ddo_source_fetch_failed', $metadata['ddo_hourly_fetch']['sources']['facebook_ads']['last_error_code'] );
+        $this->assertSame( 2, $metadata['ddo_hourly_fetch']['sources']['facebook_ads']['fetch_attempts'] );
+    }
 }

@@ -54,7 +54,39 @@ class CronEventsTest extends TestCase {
 
         $this->assertSame( 'ok', $result['notice'] );
         $this->assertSame( 'ddo_hourly_fetch', $result['job'] );
-        $this->assertSame( array( 'ddo_hourly_fetch' ), $ddo_test_state['actions_run'] );
+        $this->assertSame( array(), $ddo_test_state['actions_run'] );
+    }
+
+
+    public function test_run_scheduler_job_request_passes_selected_sources_to_hourly_fetch(): void {
+        global $ddo_test_state;
+
+        $ddo_test_state['verified_nonces']['ddo_run_scheduler_job_ddo_hourly_fetch'] = 'valid-selected';
+        ddo_set_api_data_fetch_service(
+            function ( $selected_sources ) {
+                return array(
+                    'result_count' => count( $selected_sources ),
+                    'errors_count' => 0,
+                    'error_code'   => '',
+                    'source'       => 'registry',
+                    'sources'      => array(),
+                );
+            }
+        );
+
+        $result = ddo_process_run_scheduler_job_request(
+            array(
+                'job_name'                    => 'ddo_hourly_fetch',
+                'ddo_run_scheduler_job_nonce' => 'valid-selected',
+                'source_keys'                 => array( 'ga4', 'search_console' ),
+            )
+        );
+
+        $this->assertSame( 'ok', $result['notice'] );
+        $meta = ddo_get_scheduler_job_metadata();
+        $this->assertArrayHasKey( 'ddo_hourly_fetch', $meta );
+
+        ddo_set_api_data_fetch_service( null );
     }
 
     public function test_run_scheduler_job_request_rejects_invalid_nonce_for_single_job(): void {
